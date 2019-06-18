@@ -22,16 +22,18 @@ class DataLoader():
         forcePreProcess : Flag to forcefully preprocess the data again from csv files
         '''
         # base test files
-        base_test_dataset=  ['/data/test/biwi/biwi_eth.txt', 
-                        '/data/test/crowds/crowds_zara01.txt',
-                        '/data/test/crowds/uni_examples.txt', 
-                        '/data/test/stanford/coupa_0.txt',
-                         '/data/test/stanford/coupa_1.txt', '/data/test/stanford/gates_2.txt','/data/test/stanford/hyang_0.txt','/data/test/stanford/hyang_1.txt','/data/test/stanford/hyang_3.txt','/data/test/stanford/hyang_8.txt',
-                          '/data/test/stanford/little_0.txt','/data/test/stanford/little_1.txt','/data/test/stanford/little_2.txt','/data/test/stanford/little_3.txt','/data/test/stanford/nexus_5.txt','/data/test/stanford/nexus_6.txt',
-                          '/data/test/stanford/quad_0.txt','/data/test/stanford/quad_1.txt','/data/test/stanford/quad_2.txt','/data/test/stanford/quad_3.txt'
+        base_test_dataset=  [#'/data/test/overfit/x.txt'
+                        '/data/test/biwi/biwi_eth.txt',
+                        #'/data/test/crowds/crowds_zara01.txt',
+                        #'/data/test/crowds/uni_examples.txt',
+                        #'/data/test/stanford/coupa_0.txt',
+                         #'/data/test/stanford/coupa_1.txt', '/data/test/stanford/gates_2.txt','/data/test/stanford/hyang_0.txt','/data/test/stanford/hyang_1.txt','/data/test/stanford/hyang_3.txt','/data/test/stanford/hyang_8.txt',
+                          #'/data/test/stanford/little_0.txt','/data/test/stanford/little_1.txt','/data/test/stanford/little_2.txt','/data/test/stanford/little_3.txt','/data/test/stanford/nexus_5.txt','/data/test/stanford/nexus_6.txt',
+                          #'/data/test/stanford/quad_0.txt','/data/test/stanford/quad_1.txt','/data/test/stanford/quad_2.txt','/data/test/stanford/quad_3.txt'
                           ]
         #base train files
-        base_train_dataset = ['/data/train/biwi/biwi_hotel.txt', 
+        base_train_dataset = ['/data/train/overfit/x.txt'
+                        #'/data/train/biwi/biwi_hotel.txt',
                         #'/data/train/crowds/arxiepiskopi1.txt','/data/train/crowds/crowds_zara02.txt',
                         #'/data/train/crowds/crowds_zara03.txt','/data/train/crowds/students001.txt','/data/train/crowds/students003.txt',
                         #'/data/train/mot/PETS09-S2L1.txt',
@@ -40,7 +42,7 @@ class DataLoader():
                         #'/data/train/stanford/hyang_5.txt','/data/train/stanford/hyang_6.txt','/data/train/stanford/hyang_9.txt','/data/train/stanford/nexus_0.txt','/data/train/stanford/nexus_1.txt','/data/train/stanford/nexus_2.txt','/data/train/stanford/nexus_3.txt','/data/train/stanford/nexus_4.txt','/data/train/stanford/nexus_7.txt','/data/train/stanford/nexus_8.txt','/data/train/stanford/nexus_9.txt'
                         ]
         # dimensions of each file set
-        self.dataset_dimensions = {'biwi':[720, 576], 'crowds':[720, 576], 'stanford':[595, 326], 'mot':[768, 576]}
+        self.dataset_dimensions = {'biwi':[720, 576], 'crowds':[720, 576], 'stanford':[595, 326], 'mot':[768, 576], 'overfit':[768, 576]}
         
         # List of data directories where raw data resides
         self.base_train_path = 'data/train/'
@@ -367,6 +369,10 @@ class DataLoader():
 
         # Calculate the number of batches
         self.num_batches = int(counter/self.batch_size)
+        # *OVERFIT*
+        if self.num_batches is 0:
+            self.num_batches += 1
+
         self.valid_num_batches = int(valid_counter/self.batch_size)
 
 

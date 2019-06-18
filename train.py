@@ -198,7 +198,9 @@ def train(args):
             loss_batch = 0
             
             #if we are in a new dataset, zero the counter of batch
-            if dataset_pointer_ins_grid is not dataloader.dataset_pointer and epoch is not 0:
+            # *OVERFIT*
+            #if dataset_pointer_ins_grid is not dataloader.dataset_pointer and epoch is not 0:
+            if (dataset_pointer_ins_grid is not dataloader.dataset_pointer) or (epoch is not 0):
                 num_batch = 0
                 dataset_pointer_ins_grid = dataloader.dataset_pointer
 
