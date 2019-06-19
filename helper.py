@@ -377,7 +377,7 @@ def translate(x_seq, PedsList_seq, lookup_seq, value):
     vectorized_x_seq = x_seq.clone()
     for ind, frame in enumerate(x_seq):
         for ped in PedsList_seq[ind]:
-            vectorized_x_seq[ind, lookup_seq[ped], 0:2]  = frame[lookup_seq[ped], 0:2] - value[0:2]
+            vectorized_x_seq[ind, lookup_seq[ped], 0:2] = frame[lookup_seq[ped], 0:2] - value[0:2]
 
     return vectorized_x_seq
 

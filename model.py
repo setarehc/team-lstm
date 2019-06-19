@@ -187,7 +187,6 @@ class SocialModel(nn.Module):
             else:
                 h_nodes = self.cell(concat_embedded, (hidden_states_current))
 
-
             # Compute the output
             outputs[framenum*numNodes + corr_index.data] = self.output_layer(h_nodes)
 

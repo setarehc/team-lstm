@@ -22,7 +22,7 @@ class DataLoader():
         forcePreProcess : Flag to forcefully preprocess the data again from csv files
         '''
         # base test files
-        base_test_dataset=  ['/data/original/test/hotel.txt',
+        base_test_dataset=  ['/data/original/test/eth.txt',
                         #'/data/test/overfit/x.txt'
                         #'/data/test/biwi/biwi_eth.txt',
                         #'/data/test/crowds/crowds_zara01.txt',
@@ -33,7 +33,7 @@ class DataLoader():
                           #'/data/test/stanford/quad_0.txt','/data/test/stanford/quad_1.txt','/data/test/stanford/quad_2.txt','/data/test/stanford/quad_3.txt'
                           ]
         #base train files
-        base_train_dataset = ['/data/original/train/eth.txt', '/data/original/train/ucy.txt', '/data/original/train/zara01.txt', '/data/original/train/zara02.txt',
+        base_train_dataset = ['/data/original/train/hotel.txt', '/data/original/train/ucy.txt', '/data/original/train/zara01.txt', '/data/original/train/zara02.txt',
                         #'/data/train/overfit/x.txt',
                         #'/data/train/biwi/biwi_hotel.txt',
                         #'/data/train/crowds/arxiepiskopi1.txt','/data/train/crowds/crowds_zara02.txt',

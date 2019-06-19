@@ -29,6 +29,7 @@ def main():
     
     
     # Model to be loaded
+    # *GENERAL*
     parser.add_argument('--epoch', type=int, default=14,
                         help='Epoch of model to be loaded')
     # cuda support
@@ -118,12 +119,14 @@ def main():
         # Get the checkpoint path
         checkpoint_path = os.path.join(save_directory, save_tar_name+str(sample_args.epoch)+'.tar')
         if os.path.isfile(checkpoint_path):
-            print('Loading checkpoint')
+            print('Loading checkpoint at ', checkpoint_path)
             checkpoint = torch.load(checkpoint_path)
             model_epoch = checkpoint['epoch']
             net.load_state_dict(checkpoint['state_dict'])
             print('Loaded checkpoint at epoch', model_epoch)
-        
+        else:
+            raise ValueError('Checkpoint does not exist')
+
         # For each batch
         iteration_submission = []
         iteration_result = []
@@ -151,9 +154,6 @@ def main():
             #dense vector creation
             x_seq, lookup_seq = dataloader.convert_proper_array(x_seq, numPedsList_seq, PedsList_seq)
             
-            #will be used for error calculation
-            orig_x_seq = x_seq.clone()
-            
             #grid mask calculation
             if sample_args.method == 2: #obstacle lstm
                 grid_seq = getSequenceGridMask(x_seq, dataset_data, PedsList_seq, saved_args.neighborhood_size, saved_args.grid_size, saved_args.use_cuda, True)
@@ -171,8 +171,15 @@ def main():
             # x_seq, first_values_dict = vectorize_seq(x_seq, PedsList_seq, lookup_seq)
 
 
+            # if sample_args.use_cuda:
+            #     x_seq = x_seq.cuda()
+            # *ENABLE USE_CUDA*
             if sample_args.use_cuda:
                 x_seq = x_seq.cuda()
+                first_values_dict = {k: v.cuda() for k,v in first_values_dict.items()}
+
+            # will be used for error calculation
+            orig_x_seq = x_seq.clone()
 
             # The sample function
             if sample_args.method == 3: #vanilla lstm
@@ -184,10 +191,14 @@ def main():
                 # Extract the observed part of the trajectories
                 obs_traj, obs_PedsList_seq, obs_grid = x_seq[:sample_args.obs_length], PedsList_seq[:sample_args.obs_length], grid_seq[:sample_args.obs_length]
                 ret_x_seq = sample(obs_traj, obs_PedsList_seq, sample_args, net, x_seq, PedsList_seq, saved_args, dataset_data, dataloader, lookup_seq, numPedsList_seq, sample_args.gru, obs_grid)
-            
-            #revert the points back to original space
+
+            # revert the points back to original space
             ret_x_seq = revert_seq(ret_x_seq, PedsList_seq, lookup_seq, first_values_dict)
-            
+
+            # *ENABLE USE_CUDA*
+            if sample_args.use_cuda:
+                ret_x_seq = ret_x_seq.cuda()
+
             # <--------------------- Experimental inverse block ---------------------->
             # ret_x_seq = revert_seq(ret_x_seq, PedsList_seq, lookup_seq, target_id_values, first_values_dict)
             # ret_x_seq = rotate_traj_with_target_ped(ret_x_seq, -angle, PedsList_seq, lookup_seq)
@@ -223,7 +234,7 @@ def main():
                 results = []
 
             
-            submission.append(submission_preprocess(dataloader, ret_x_seq.data[sample_args.obs_length:, lookup_seq[target_id], :].numpy(), sample_args.pred_length, sample_args.obs_length, target_id))
+            submission.append(submission_preprocess(dataloader, ret_x_seq.data[sample_args.obs_length:, lookup_seq[target_id], :].cpu().numpy(), sample_args.pred_length, sample_args.obs_length, target_id))
             results.append((x_seq.data.cpu().numpy(), ret_x_seq.data.cpu().numpy(), PedsList_seq, lookup_seq , dataloader.get_frame_sequence(seq_lenght), target_id, sample_args.obs_length))
 
 
