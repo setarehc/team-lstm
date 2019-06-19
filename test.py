@@ -130,11 +130,9 @@ def main():
         results = []
         submission = []
 
-       
         # Variable to maintain total error
         total_error = 0
         final_error = 0
-
 
         for batch in range(dataloader.num_batches):
             start = time.time()
@@ -145,7 +143,6 @@ def main():
             x_seq, d_seq ,numPedsList_seq, PedsList_seq, target_id = x[0], d[0], numPedsList[0], PedsList[0], target_ids[0]
             dataloader.clean_test_data(x_seq, target_id, sample_args.obs_length, sample_args.pred_length)
             dataloader.clean_ped_list(x_seq, PedsList_seq, target_id, sample_args.obs_length, sample_args.pred_length)
-
             
             #get processing file name and then get dimensions of file
             folder_name = dataloader.get_directory_name_with_pointer(d_seq)
@@ -155,9 +152,7 @@ def main():
             x_seq, lookup_seq = dataloader.convert_proper_array(x_seq, numPedsList_seq, PedsList_seq)
             
             #will be used for error calculation
-            orig_x_seq = x_seq.clone() 
-            
-            target_id_values = orig_x_seq[0][lookup_seq[target_id], 0:2]
+            orig_x_seq = x_seq.clone()
             
             #grid mask calculation
             if sample_args.method == 2: #obstacle lstm
@@ -199,9 +194,18 @@ def main():
             # ret_x_seq = translate(ret_x_seq, PedsList_seq, lookup_seq ,-target_id_values)
             
             # Record the mean and final displacement error
-            total_error += get_mean_error(ret_x_seq[1:sample_args.obs_length].data, orig_x_seq[1:sample_args.obs_length].data, PedsList_seq[1:sample_args.obs_length], PedsList_seq[1:sample_args.obs_length], sample_args.use_cuda, lookup_seq)
-            final_error += get_final_error(ret_x_seq[1:sample_args.obs_length].data, orig_x_seq[1:sample_args.obs_length].data, PedsList_seq[1:sample_args.obs_length], PedsList_seq[1:sample_args.obs_length], lookup_seq)
-
+            # *ORIGINAL TEST*
+            #total_error += get_mean_error(ret_x_seq[1:sample_args.obs_length].data, orig_x_seq[1:sample_args.obs_length].data, PedsList_seq[1:sample_args.obs_length], PedsList_seq[1:sample_args.obs_length], sample_args.use_cuda, lookup_seq)
+            total_error += get_mean_error(ret_x_seq[sample_args.obs_length:].data,
+                                          orig_x_seq[sample_args.obs_length:].data,
+                                          PedsList_seq[sample_args.obs_length:],
+                                          PedsList_seq[sample_args.obs_length:],
+                                          sample_args.use_cuda, lookup_seq)
+            #final_error += get_final_error(ret_x_seq[1:sample_args.obs_length].data, orig_x_seq[1:sample_args.obs_length].data, PedsList_seq[1:sample_args.obs_length], PedsList_seq[1:sample_args.obs_length], lookup_seq)
+            final_error += get_final_error(ret_x_seq[sample_args.obs_length:].data,
+                                           orig_x_seq[sample_args.obs_length:].data,
+                                           PedsList_seq[sample_args.obs_length:],
+                                           PedsList_seq[sample_args.obs_length:], lookup_seq)
             
             end = time.time()
 
@@ -299,8 +303,8 @@ def sample(x_seq, Pedlist, args, net, true_x_seq, true_Pedlist, saved_args, dime
             ret_x_seq[tstep + 1, :, 0] = next_x
             ret_x_seq[tstep + 1, :, 1] = next_y
 
-
-        ret_x_seq[:args.obs_length, :, :] = x_seq.clone()
+        # *OVERFIT TEST*
+        #ret_x_seq[:args.obs_length, :, :] = x_seq.clone()
 
         # Last seen grid
         if grid is not None: #no vanilla lstm

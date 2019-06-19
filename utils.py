@@ -22,8 +22,9 @@ class DataLoader():
         forcePreProcess : Flag to forcefully preprocess the data again from csv files
         '''
         # base test files
-        base_test_dataset=  [#'/data/test/overfit/x.txt'
-                        '/data/test/biwi/biwi_eth.txt',
+        base_test_dataset=  ['/data/original/test/hotel.txt',
+                        #'/data/test/overfit/x.txt'
+                        #'/data/test/biwi/biwi_eth.txt',
                         #'/data/test/crowds/crowds_zara01.txt',
                         #'/data/test/crowds/uni_examples.txt',
                         #'/data/test/stanford/coupa_0.txt',
@@ -32,7 +33,8 @@ class DataLoader():
                           #'/data/test/stanford/quad_0.txt','/data/test/stanford/quad_1.txt','/data/test/stanford/quad_2.txt','/data/test/stanford/quad_3.txt'
                           ]
         #base train files
-        base_train_dataset = ['/data/train/overfit/x.txt'
+        base_train_dataset = ['/data/original/train/eth.txt', '/data/original/train/ucy.txt', '/data/original/train/zara01.txt', '/data/original/train/zara02.txt',
+                        #'/data/train/overfit/x.txt',
                         #'/data/train/biwi/biwi_hotel.txt',
                         #'/data/train/crowds/arxiepiskopi1.txt','/data/train/crowds/crowds_zara02.txt',
                         #'/data/train/crowds/crowds_zara03.txt','/data/train/crowds/students001.txt','/data/train/crowds/students003.txt',
@@ -42,11 +44,17 @@ class DataLoader():
                         #'/data/train/stanford/hyang_5.txt','/data/train/stanford/hyang_6.txt','/data/train/stanford/hyang_9.txt','/data/train/stanford/nexus_0.txt','/data/train/stanford/nexus_1.txt','/data/train/stanford/nexus_2.txt','/data/train/stanford/nexus_3.txt','/data/train/stanford/nexus_4.txt','/data/train/stanford/nexus_7.txt','/data/train/stanford/nexus_8.txt','/data/train/stanford/nexus_9.txt'
                         ]
         # dimensions of each file set
-        self.dataset_dimensions = {'biwi':[720, 576], 'crowds':[720, 576], 'stanford':[595, 326], 'mot':[768, 576], 'overfit':[768, 576]}
+        # *OVERFIT* *ORIGINAL*
+        self.dataset_dimensions = {'hotel.txt': [720, 576], 'eth.txt': [720, 576],
+                                   'ucy.txt': [720, 576], 'zara01.txt': [720, 576],
+                                   'zara02.txt': [720, 576], 'biwi': [720, 576],
+                                   'crowds': [720, 576], 'stanford': [595, 326],
+                                   'mot': [768, 576], 'overfit': [768, 576]}
         
         # List of data directories where raw data resides
-        self.base_train_path = 'data/train/'
-        self.base_test_path = 'data/test/'
+        # *ORIGINAL*
+        self.base_train_path = 'data/original/'#'data/train/'
+        self.base_test_path = 'data/original/'#'data/test/'
         self.base_validation_path = 'data/validation/'
 
         # check infer flag, if true choose test directory as base directory
@@ -227,7 +235,9 @@ class DataLoader():
                 else:
                     column_names = ['frame_num','ped_id','y','x']
                     df = pd.read_csv(directory, dtype={'frame_num':'int','ped_id':'int' }, delimiter = ' ',  header=None, names=column_names, converters = {c:lambda x: float('nan') if x == '?' else float(x) for c in ['y','x']})
-                    self.target_ids = np.array(df[df['y'].isnull()].drop_duplicates(subset={'ped_id'}, keep='first', inplace=False)['ped_id'])
+                    # *ORIGINAL TEST*
+                    #self.target_ids = np.array(df[df['y'].isnull()].drop_duplicates(subset={'ped_id'}, keep='first', inplace=False)['ped_id'])
+                    self.target_ids = np.array(df.drop_duplicates(subset={'ped_id'}, keep='first', inplace=False)['ped_id'])
 
             # convert pandas -> numpy array
             data = np.array(df)
@@ -427,6 +437,12 @@ class DataLoader():
                 numPedsList_batch.append(seq_numPedsList)
                 PedsList_batch.append(seq_PedsList)
                 # get correct target ped id for the sequence
+                #print("self.target_ids:", self.target_ids)
+                #print("self.target_ids[self.dataset_pointer][:]:", self.target_ids[self.dataset_pointer][:])
+                #print("self.frame_pointer:", self.frame_pointer)
+                #print("self.seq_length:", self.seq_length)
+                #print("devision:", self.frame_pointer/self.seq_length)
+                #print("len(target_ids:)", len(self.target_ids[self.dataset_pointer][:]))
                 target_ids.append(self.target_ids[self.dataset_pointer][math.floor((self.frame_pointer)/self.seq_length)])
                 self.frame_pointer += self.seq_length
 
@@ -625,7 +641,8 @@ class DataLoader():
 
     def get_directory_name_with_pointer(self, pointer_index):
         # get directory name using pointer index
-        folder_name = self.data_dirs[pointer_index].split('/')[-2]
+        # *ORIGINAL*
+        folder_name = self.data_dirs[pointer_index].split('/')[-1]#[-2]
         return folder_name
 
     def get_all_directory_namelist(self):
