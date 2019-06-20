@@ -117,26 +117,26 @@ def get_mean_error(ret_nodes, nodes, assumedNodesPresent, trueNodesPresent, usin
     if using_cuda:
         error = error.cuda()
 
-    for tstep in range(pred_length):
-        counter = 0
+    for frame_idx in range(pred_length):
+        num_peds_in_frame = 0
 
-        for nodeID in assumedNodesPresent[tstep]:
-            nodeID = int(nodeID)
+        for ped_id in assumedNodesPresent[frame_idx]:
+            ped_id = int(ped_id)
 
-            if nodeID not in trueNodesPresent[tstep]:
+            if ped_id not in trueNodesPresent[frame_idx]:
                 continue
 
-            nodeID = look_up[nodeID]
+            ped_idx = look_up[ped_id]
 
 
-            pred_pos = ret_nodes[tstep, nodeID, :]
-            true_pos = nodes[tstep, nodeID, :]
+            pred_pos = ret_nodes[frame_idx, ped_idx, :]
+            true_pos = nodes[frame_idx, ped_idx, :]
 
-            error[tstep] += torch.norm(pred_pos - true_pos, p=2)
-            counter += 1
+            error[frame_idx] += torch.norm(pred_pos - true_pos, p=2)
+            num_peds_in_frame += 1
 
-        if counter != 0:
-            error[tstep] = error[tstep] / counter
+        if num_peds_in_frame > 1:
+            error[frame_idx] = error[frame_idx] / num_peds_in_frame
 
     return torch.mean(error)
 
@@ -165,28 +165,28 @@ def get_final_error(ret_nodes, nodes, assumedNodesPresent, trueNodesPresent, loo
     '''
     pred_length = ret_nodes.size()[0]
     error = 0
-    counter = 0
+    num_peds_in_frame = 0
 
     # Last time-step
     tstep = pred_length - 1
-    for nodeID in assumedNodesPresent[tstep]:
-        nodeID = int(nodeID)
+    for ped_id in assumedNodesPresent[tstep]:
+        ped_id = int(ped_id)
 
 
-        if nodeID not in trueNodesPresent[tstep]:
+        if ped_id not in trueNodesPresent[tstep]:
             continue
 
-        nodeID = look_up[nodeID]
+        ped_idx = look_up[ped_id]
 
         
-        pred_pos = ret_nodes[tstep, nodeID, :]
-        true_pos = nodes[tstep, nodeID, :]
+        pred_pos = ret_nodes[tstep, ped_idx, :]
+        true_pos = nodes[tstep, ped_idx, :]
         
         error += torch.norm(pred_pos - true_pos, p=2)
-        counter += 1
+        num_peds_in_frame += 1
         
-    if counter != 0:
-        error = error / counter
+    if num_peds_in_frame > 1:
+        error = error / num_peds_in_frame
             
     return error
 
