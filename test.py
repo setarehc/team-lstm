@@ -93,9 +93,7 @@ def main():
     create_directories(os.path.join(result_directory, model_name), dataloader.get_all_directory_namelist())
     create_directories(plot_directory, [plot_test_file_directory])
     dataloader.reset_batch_pointer()
-
-
-
+    
 
     dataset_pointer_ins = dataloader.dataset_pointer
 
