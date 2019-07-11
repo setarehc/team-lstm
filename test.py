@@ -18,21 +18,21 @@ from grid import getSequenceGridMask, getGridMask
 
 
 def main():
-    
+
     parser = argparse.ArgumentParser()
     # Observed length of the trajectory parameter
-    parser.add_argument('--obs_length', type=int, default=8,
+    parser.add_argument('--obs_length', type=int, default=20,
                         help='Observed length of the trajectory')
     # Predicted length of the trajectory parameter
-    parser.add_argument('--pred_length', type=int, default=12,
+    parser.add_argument('--pred_length', type=int, default=30,
                         help='Predicted length of the trajectory')
-    
-    
+
+
     # Model to be loaded
-    parser.add_argument('--epoch', type=int, default=14,
+    parser.add_argument('--epoch', type=int, default=29,
                         help='Epoch of model to be loaded')
     # cuda support
-    parser.add_argument('--use_cuda', action="store_true", default=False,
+    parser.add_argument('--use_cuda', action="store_true", default=True,
                         help='Use GPU or not')
     # drive support
     parser.add_argument('--drive', action="store_true", default=False,
@@ -47,10 +47,10 @@ def main():
     # method selection
     parser.add_argument('--method', type=int, default=1,
                         help='Method of lstm will be used (1 = social lstm, 2 = obstacle lstm, 3 = vanilla lstm)')
-    
+
     # Parse the parameters
     sample_args = parser.parse_args()
-    
+
     #for drive run
     prefix = ''
     f_prefix = '.'
@@ -96,10 +96,10 @@ def main():
 
 
 
-    
+
     dataset_pointer_ins = dataloader.dataset_pointer
 
-    
+
     smallest_err = 100000
     smallest_err_iter_num = -1
     origin = (0,0)
@@ -112,7 +112,7 @@ def main():
         # Initialize net
         net = get_model(sample_args.method, saved_args, True)
 
-        if sample_args.use_cuda:        
+        if sample_args.use_cuda:
             net = net.cuda()
 
         # Get the checkpoint path
@@ -123,7 +123,9 @@ def main():
             model_epoch = checkpoint['epoch']
             net.load_state_dict(checkpoint['state_dict'])
             print('Loaded checkpoint at epoch', model_epoch)
-        
+        else:
+            raise ValueError('Incorrect checkpoint: file does not exist')
+
         # For each batch
         iteration_submission = []
         iteration_result = []
@@ -143,21 +145,21 @@ def main():
             x_seq, d_seq ,numPedsList_seq, PedsList_seq, target_id = x[0], d[0], numPedsList[0], PedsList[0], target_ids[0]
             dataloader.clean_test_data(x_seq, target_id, sample_args.obs_length, sample_args.pred_length)
             dataloader.clean_ped_list(x_seq, PedsList_seq, target_id, sample_args.obs_length, sample_args.pred_length)
-            
+
             #get processing file name and then get dimensions of file
             folder_name = dataloader.get_directory_name_with_pointer(d_seq)
             dataset_data = dataloader.get_dataset_dimension(folder_name)
-            
+
             #dense vector creation
             x_seq, lookup_seq = dataloader.convert_proper_array(x_seq, numPedsList_seq, PedsList_seq)
-            
-            #will be used for error calculation
+
+            # will be used for error calculation
             orig_x_seq = x_seq.clone()
-            
+
             #grid mask calculation
             if sample_args.method == 2: #obstacle lstm
                 grid_seq = getSequenceGridMask(x_seq, dataset_data, PedsList_seq, saved_args.neighborhood_size, saved_args.grid_size, saved_args.use_cuda, True)
-            elif  sample_args.method == 1: #social lstm   
+            elif  sample_args.method == 1: #social lstm
                 grid_seq = getSequenceGridMask(x_seq, dataset_data, PedsList_seq, saved_args.neighborhood_size, saved_args.grid_size, saved_args.use_cuda)
 
             #vectorize datapoints
@@ -170,9 +172,11 @@ def main():
             # grid_seq = getSequenceGridMask(x_seq[:sample_args.obs_length], dataset_data, PedsList_seq, saved_args.neighborhood_size, saved_args.grid_size, sample_args.use_cuda)
             # x_seq, first_values_dict = vectorize_seq(x_seq, PedsList_seq, lookup_seq)
 
-
+            # *CUDA*
             if sample_args.use_cuda:
                 x_seq = x_seq.cuda()
+                first_values_dict = {k: v.cuda() for k, v in first_values_dict.items()}
+                orig_x_seq = orig_x_seq.cuda()
 
             # The sample function
             if sample_args.method == 3: #vanilla lstm
@@ -184,15 +188,19 @@ def main():
                 # Extract the observed part of the trajectories
                 obs_traj, obs_PedsList_seq, obs_grid = x_seq[:sample_args.obs_length], PedsList_seq[:sample_args.obs_length], grid_seq[:sample_args.obs_length]
                 ret_x_seq = sample(obs_traj, obs_PedsList_seq, sample_args, net, x_seq, PedsList_seq, saved_args, dataset_data, dataloader, lookup_seq, numPedsList_seq, sample_args.gru, obs_grid)
-            
+
             #revert the points back to original space
             ret_x_seq = revert_seq(ret_x_seq, PedsList_seq, lookup_seq, first_values_dict)
-            
+
+            # *CUDA*
+            if sample_args.use_cuda:
+                ret_x_seq = ret_x_seq.cuda()
+
             # <--------------------- Experimental inverse block ---------------------->
             # ret_x_seq = revert_seq(ret_x_seq, PedsList_seq, lookup_seq, target_id_values, first_values_dict)
             # ret_x_seq = rotate_traj_with_target_ped(ret_x_seq, -angle, PedsList_seq, lookup_seq)
             # ret_x_seq = translate(ret_x_seq, PedsList_seq, lookup_seq ,-target_id_values)
-            
+
             # Record the mean and final displacement error
             # *ORIGINAL TEST*
             #total_error += get_mean_error(ret_x_seq[1:sample_args.obs_length].data, orig_x_seq[1:sample_args.obs_length].data, PedsList_seq[1:sample_args.obs_length], PedsList_seq[1:sample_args.obs_length], sample_args.use_cuda, lookup_seq)
@@ -206,7 +214,7 @@ def main():
                                            orig_x_seq[sample_args.obs_length:].data,
                                            PedsList_seq[sample_args.obs_length:],
                                            PedsList_seq[sample_args.obs_length:], lookup_seq)
-            
+
             end = time.time()
 
             print('Current file : ', dataloader.get_file_name(0),' Processed trajectory number : ', batch+1, 'out of', dataloader.num_batches, 'trajectories in time', end - start)
@@ -222,8 +230,8 @@ def main():
                 submission = []
                 results = []
 
-            
-            submission.append(submission_preprocess(dataloader, ret_x_seq.data[sample_args.obs_length:, lookup_seq[target_id], :].numpy(), sample_args.pred_length, sample_args.obs_length, target_id))
+
+            submission.append(submission_preprocess(dataloader, ret_x_seq.data[sample_args.obs_length:, lookup_seq[target_id], :].cpu().numpy(), sample_args.pred_length, sample_args.obs_length, target_id))
             results.append((x_seq.data.cpu().numpy(), ret_x_seq.data.cpu().numpy(), PedsList_seq, lookup_seq , dataloader.get_frame_sequence(seq_lenght), target_id, sample_args.obs_length))
 
 
@@ -287,7 +295,7 @@ def sample(x_seq, Pedlist, args, net, true_x_seq, true_Pedlist, saved_args, dime
 
 
         # For the observed part of the trajectory
-        for tstep in range(args.obs_length-1):
+        for tstep in range(args.obs_length - 1):
             if grid is None: #vanilla lstm
                # Do a forward prop
                 out_obs, hidden_states, cell_states = net(x_seq[tstep].view(1, numx_seq, 2), hidden_states, cell_states, [Pedlist[tstep]], [num_pedlist[tstep]], dataloader, look_up)
@@ -304,7 +312,7 @@ def sample(x_seq, Pedlist, args, net, true_x_seq, true_Pedlist, saved_args, dime
             ret_x_seq[tstep + 1, :, 1] = next_y
 
         # *OVERFIT TEST*
-        #ret_x_seq[:args.obs_length, :, :] = x_seq.clone()
+        ret_x_seq[:args.obs_length, :, :] = x_seq.clone()
 
         # Last seen grid
         if grid is not None: #no vanilla lstm
@@ -315,7 +323,7 @@ def sample(x_seq, Pedlist, args, net, true_x_seq, true_Pedlist, saved_args, dime
         #ret_x_seq[args.obs_length-1] = x_seq[args.obs_length-1]
 
         # For the predicted part of the trajectory
-        for tstep in range(args.obs_length-1, args.pred_length + args.obs_length-1):
+        for tstep in range(args.obs_length - 1, args.pred_length + args.obs_length - 1):
             # Do a forward prop
             if grid is None: #vanilla lstm
                 outputs, hidden_states, cell_states = net(ret_x_seq[tstep].view(1, numx_seq, 2), hidden_states, cell_states, [true_Pedlist[tstep]], [num_pedlist[tstep]], dataloader, look_up)
@@ -339,15 +347,15 @@ def sample(x_seq, Pedlist, args, net, true_x_seq, true_Pedlist, saved_args, dime
 
             if args.use_cuda:
                 list_of_x_seq = list_of_x_seq.cuda()
-           
-            #Get their predicted positions
+
+            # Get their predicted positions
             current_x_seq = torch.index_select(ret_x_seq[tstep+1], 0, list_of_x_seq)
 
-            if grid is not None: #no vanilla lstm
+            if grid is not None: # no vanilla lstm
                 # Compute the new grid masks with the predicted positions
-                if args.method == 2: #obstacle lstm
+                if args.method == 2: # obstacle lstm
                     prev_grid = getGridMask(current_x_seq.data.cpu(), dimensions, len(true_Pedlist[tstep+1]),saved_args.neighborhood_size, saved_args.grid_size, True)
-                elif  args.method == 1: #social lstm   
+                elif  args.method == 1: # social lstm
                     prev_grid = getGridMask(current_x_seq.data.cpu(), dimensions, len(true_Pedlist[tstep+1]),saved_args.neighborhood_size, saved_args.grid_size)
 
                 prev_grid = Variable(torch.from_numpy(prev_grid).float())
