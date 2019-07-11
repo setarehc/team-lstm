@@ -10,7 +10,7 @@ from helper import *
 
 class DataLoader():
 
-    def __init__(self,f_prefix, batch_size=5, seq_length=20, num_of_validation = 0, forcePreProcess=False, infer=False, generate = False):
+    def __init__(self, f_prefix, batch_size=5, seq_length=50, num_of_validation=0, forcePreProcess=False, infer=False, generate=False):
         '''
         Initialiser function for the DataLoader class
         params:
@@ -22,7 +22,7 @@ class DataLoader():
         forcePreProcess : Flag to forcefully preprocess the data again from csv files
         '''
         # base test files
-        base_test_dataset=  ['/data/original/test/hotel.txt',
+        base_test_dataset=  ['/data/basketball/test/',
                         #'/data/test/overfit/x.txt'
                         #'/data/test/biwi/biwi_eth.txt',
                         #'/data/test/crowds/crowds_zara01.txt',
@@ -33,7 +33,8 @@ class DataLoader():
                           #'/data/test/stanford/quad_0.txt','/data/test/stanford/quad_1.txt','/data/test/stanford/quad_2.txt','/data/test/stanford/quad_3.txt'
                           ]
         #base train files
-        base_train_dataset = ['/data/original/train/eth.txt', '/data/original/train/ucy.txt', '/data/original/train/zara01.txt', '/data/original/train/zara02.txt',
+        base_train_dataset = ['/data/basketball/small_train/'
+                        #'/data/original/train/hotel.txt', '/data/original/train/ucy.txt', '/data/original/train/zara01.txt', '/data/original/train/zara02.txt',
                         #'/data/train/overfit/x.txt',
                         #'/data/train/biwi/biwi_hotel.txt',
                         #'/data/train/crowds/arxiepiskopi1.txt','/data/train/crowds/crowds_zara02.txt',
@@ -49,12 +50,13 @@ class DataLoader():
                                    'ucy.txt': [720, 576], 'zara01.txt': [720, 576],
                                    'zara02.txt': [720, 576], 'biwi': [720, 576],
                                    'crowds': [720, 576], 'stanford': [595, 326],
-                                   'mot': [768, 576], 'overfit': [768, 576]}
+                                   'mot': [768, 576], 'overfit': [768, 576],
+                                   'basketball': [400, 360]}
         
         # List of data directories where raw data resides
         # *ORIGINAL*
-        self.base_train_path = 'data/original/'#'data/train/'
-        self.base_test_path = 'data/original/'#'data/test/'
+        self.base_train_path = 'data/basketball/'#'data/basketball/'#'data/original/'#'data/train/'
+        self.base_test_path = 'data/basketball/'#'data/original/'#'data/test/'
         self.base_validation_path = 'data/validation/'
 
         # check infer flag, if true choose test directory as base directory
@@ -217,7 +219,7 @@ class DataLoader():
 
             # Load the data from the txt file
             print("Now processing: ", directory)
-            column_names = ['frame_num','ped_id','y','x']
+            column_names = ['frame_num', 'ped_id', 'y', 'x']
 
             # if training mode, read train file to pandas dataframe and process
             if self.infer is False:
@@ -416,7 +418,7 @@ class DataLoader():
 
         # Iteration index
         i = 0
-        while i < self.batch_size:
+        while i < self.batch_size:#1:#self.batch_size:
             # Extract the frame data of the current dataset
             frame_data = self.data[self.dataset_pointer]
             numPedsList = self.numPedsList[self.dataset_pointer]
@@ -443,7 +445,8 @@ class DataLoader():
                 #print("self.seq_length:", self.seq_length)
                 #print("devision:", self.frame_pointer/self.seq_length)
                 #print("len(target_ids:)", len(self.target_ids[self.dataset_pointer][:]))
-                target_ids.append(self.target_ids[self.dataset_pointer][math.floor((self.frame_pointer)/self.seq_length)])
+                pointer = math.floor((self.frame_pointer)/self.seq_length)
+                target_ids.append(self.target_ids[self.dataset_pointer][pointer])
                 self.frame_pointer += self.seq_length
 
                 d.append(self.dataset_pointer)
@@ -642,7 +645,7 @@ class DataLoader():
     def get_directory_name_with_pointer(self, pointer_index):
         # get directory name using pointer index
         # *ORIGINAL*
-        folder_name = self.data_dirs[pointer_index].split('/')[-1]#[-2]
+        folder_name = self.data_dirs[pointer_index].split('/')[-3]#[-1][-2][-3]
         return folder_name
 
     def get_all_directory_namelist(self):
