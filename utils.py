@@ -300,6 +300,12 @@ class DataLoader():
                     current_x = pedsInFrame[3, pedsInFrame[1, :] == ped][0]
                     current_y = pedsInFrame[2, pedsInFrame[1, :] == ped][0]
 
+                    # *Basketball TRAIN*
+                    # Normalize x-y values
+                    if data_file.split('/')[-2] == 'basketball':
+                        current_x /= self.get_dataset_dimension('basketball')[1]
+                        current_y /= self.get_dataset_dimension('basketball')[0]
+
                     # Add their pedID, x, y to the row of the numpy array
                     pedsWithPos.append([ped, current_x, current_y])
 
