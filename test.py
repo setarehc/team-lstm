@@ -15,43 +15,45 @@ from utils import DataLoader
 from helper import getCoef, sample_gaussian_2d, get_mean_error, get_final_error
 from helper import *
 from grid import getSequenceGridMask, getGridMask
+from types import SimpleNamespace
+import sacred
+import utils
+from sacred.observers import MongoObserver
+
+ex = sacred.Experiment('test', ingredients=[utils.data_ingredient])
+ex.observers.append(MongoObserver.create(url='localhost:27017', db_name='MY_DB'))
 
 
-def main():
-
-    parser = argparse.ArgumentParser()
-    # Observed length of the trajectory parameter
-    parser.add_argument('--obs_length', type=int, default=20,
-                        help='Observed length of the trajectory')
-    # Predicted length of the trajectory parameter
-    parser.add_argument('--pred_length', type=int, default=30,
-                        help='Predicted length of the trajectory')
-
-
+@ex.config
+def cfg():
     # Model to be loaded
-    parser.add_argument('--epoch', type=int, default=29,
-                        help='Epoch of model to be loaded')
-    # cuda support
-    parser.add_argument('--use_cuda', action="store_true", default=True,
-                        help='Use GPU or not')
-    # drive support
-    parser.add_argument('--drive', action="store_true", default=False,
-                        help='Use Google drive or not')
-    # number of iteration -> we are trying many times to get lowest test error derived from observed part and prediction of observed
+    epoch = 0  # 'Epoch of model to be loaded'
+
+    # Number of iteration -> we are trying many times to get lowest test error derived from observed part and prediction of observed
     # part.Currently it is useless because we are using direct copy of observed part and no use of prediction.Test error will be 0.
-    parser.add_argument('--iteration', type=int, default=1,
-                        help='Number of iteration to create test file (smallest test errror will be selected)')
-    # gru model
-    parser.add_argument('--gru', action="store_true", default=False,
-                        help='True : GRU cell, False: LSTM cell')
-    # method selection
-    parser.add_argument('--method', type=int, default=1,
-                        help='Method of lstm will be used (1 = social lstm, 2 = obstacle lstm, 3 = vanilla lstm)')
+    iteration = 1  # 'Number of iteration to create test file (smallest test error will be selected)'
 
-    # Parse the parameters
-    sample_args = parser.parse_args()
+    # Method selection
+    method = 1  # 'Method of lstm will be used (1 = social lstm, 2 = obstacle lstm, 3 = vanilla lstm)'
 
-    #for drive run
+
+def init(seed, config, _run):
+    # Next five lines are to call args.seq_length instead of args.common.seq_length
+    common_config = config['common']
+    config.pop('common')
+    for k, v in common_config.items():
+        assert k not in config
+        config[k] = v
+
+    args = SimpleNamespace(**config)
+    # utils.seedAll(seed) # TODO: implement seedAll
+    _run.info['args'] = args.__dict__
+    return args
+
+
+def test(sample_args, _run):
+
+    # for drive run
     prefix = ''
     f_prefix = '.'
     if sample_args.drive is True:
@@ -60,7 +62,7 @@ def main():
 
     #run sh file for folder creation
     if not os.path.isdir("log/"):
-      print("Directory creation script is running...")
+      #print("Directory creation script is running...")
       subprocess.call([f_prefix+'/make_directories.sh'])
 
     method_name = get_method_name(sample_args.method)
@@ -70,7 +72,7 @@ def main():
         model_name = "GRU"
         save_tar_name = method_name+"_gru_model_"
 
-    print("Selected method name: ", method_name, " model name: ", model_name)
+    #print("Selected method name: ", method_name, " model name: ", model_name)
 
     # Save directory
     save_directory = os.path.join(f_prefix, 'model/', method_name, model_name)
@@ -93,7 +95,7 @@ def main():
     create_directories(os.path.join(result_directory, model_name), dataloader.get_all_directory_namelist())
     create_directories(plot_directory, [plot_test_file_directory])
     dataloader.reset_batch_pointer()
-    
+
 
     dataset_pointer_ins = dataloader.dataset_pointer
 
@@ -116,11 +118,11 @@ def main():
         # Get the checkpoint path
         checkpoint_path = os.path.join(save_directory, save_tar_name+str(sample_args.epoch)+'.tar')
         if os.path.isfile(checkpoint_path):
-            print('Loading checkpoint')
+            #print('Loading checkpoint')
             checkpoint = torch.load(checkpoint_path)
             model_epoch = checkpoint['epoch']
             net.load_state_dict(checkpoint['state_dict'])
-            print('Loaded checkpoint at epoch', model_epoch)
+            #print('Loaded checkpoint at epoch', model_epoch)
         else:
             raise ValueError('Incorrect checkpoint: file does not exist')
 
@@ -215,7 +217,7 @@ def main():
 
             end = time.time()
 
-            print('Current file : ', dataloader.get_file_name(0),' Processed trajectory number : ', batch+1, 'out of', dataloader.num_batches, 'trajectories in time', end - start)
+            #print('Current file : ', dataloader.get_file_name(0),' Processed trajectory number : ', batch+1, 'out of', dataloader.num_batches, 'trajectories in time', end - start)
 
 
 
@@ -240,9 +242,9 @@ def main():
         result_store.append(iteration_result)
 
         if total_error<smallest_err:
-            print("**********************************************************")
-            print('Best iteration has been changed. Previous best iteration: ', smallest_err_iter_num+1, 'Error: ', smallest_err / dataloader.num_batches)
-            print('New best iteration : ', iteration+1, 'Error: ',total_error / dataloader.num_batches)
+            #print("**********************************************************")
+            #print('Best iteration has been changed. Previous best iteration: ', smallest_err_iter_num+1, 'Error: ', smallest_err / dataloader.num_batches)
+            #print('New best iteration : ', iteration+1, 'Error: ',total_error / dataloader.num_batches)
             smallest_err_iter_num = iteration
             smallest_err = total_error
 
@@ -385,5 +387,7 @@ def submission_preprocess(dataloader, ret_x_seq, pred_length, obs_length, target
     return result
 
 
-if __name__ == '__main__':
-    main()
+@ex.automain
+def experiment(_seed, _config, _run):
+    args = init(_seed, _config, _run)
+    test(args, _run)

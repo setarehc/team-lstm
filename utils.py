@@ -8,6 +8,42 @@ import math
 from torch.autograd import Variable
 from helper import *
 
+from sacred import Ingredient
+
+data_ingredient = Ingredient('common')
+
+@data_ingredient.config
+def cfg():
+    input_size = 2
+    output_size = 5
+
+    # RNN size parameter (dimension of the output/hidden state)
+    rnn_size = 128  # size of RNN hidden state
+
+    # Length of sequence to be considered parameter
+    seq_length = 50  # RNN sequence length
+    obs_length = 20  # observation length
+    pred_length = 30  # prediction length
+
+    # Dimension of the embeddings parameter
+    embedding_size = 64  # Embedding dimension for the spatial coordinates
+
+    # Size of neighborhood to be considered parameter
+    neighborhood_size = 32  # Neighborhood size to be considered for social grid
+
+    # Size of the social grid parameter
+    grid_size = 4   # Grid size of the social grid
+
+    # Cuda parameter
+    use_cuda = True  # Use GPU or not
+
+    # GRU parameter
+    gru = False  # True : GRU cell, False: LSTM cell
+
+    # drive option
+    drive = False   # Use Google drive or not
+
+
 class DataLoader():
 
     def __init__(self, f_prefix, batch_size=5, seq_length=50, num_of_validation=0, forcePreProcess=False, infer=False, generate=False):
@@ -22,7 +58,7 @@ class DataLoader():
         forcePreProcess : Flag to forcefully preprocess the data again from csv files
         '''
         # base test files
-        base_test_dataset=  ['/data/basketball/test/',
+        base_test_dataset=  ['/data/basketball/small_test/',
                         #'/data/test/overfit/x.txt'
                         #'/data/test/biwi/biwi_eth.txt',
                         #'/data/test/crowds/crowds_zara01.txt',
