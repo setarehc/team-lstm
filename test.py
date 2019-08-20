@@ -12,7 +12,7 @@ from os import listdir
 from os.path import isfile, join
 
 ex = sacred.Experiment('test', ingredients=[utils.data_ingredient])
-ex.observers.append(MongoObserver.create(url='localhost:27017', db_name='MY_DB'))
+#ex.observers.append(MongoObserver.create(url='localhost:27017', db_name='MY_DB'))
 
 
 @ex.config
@@ -43,6 +43,105 @@ def init(seed, config, _run):
     # utils.seedAll(seed) # TODO: implement seedAll
     _run.info['args'] = args.__dict__
     return args
+
+
+def testHelper(net, test_loader, sample_args, saved_args):
+    num_batches = math.floor(len(test_loader.dataset) / sample_args.batch_size)
+
+    # For each batch
+    iteration_submission = []
+    iteration_result = []
+    results = []
+    submission = []
+
+    # Variable to maintain total error
+    total_error = 0
+    final_error = 0
+    # *Kevin Murphy*
+    norm_l2_dists = torch.zeros(sample_args.obs_length)
+    if sample_args.use_cuda:
+        norm_l2_dists = norm_l2_dists.cuda()
+
+    for batch_idx, batch in enumerate(test_loader):
+        start = time.time()
+
+        # Get the sequence
+        x_seq, numPedsList_seq, PedsList_seq, folder_path = batch[
+            0]  # because source code assumes batch_size=0 and doesn't iterate over sequences of a batch
+
+        # Get processing file name and then get dimensions of file
+        folder_name = folder_path.split('/')[-3]
+        dataset_data = dataset_dimensions[folder_name]
+
+        # Dense vector creation
+        x_seq, lookup_seq = convert_to_tensor(x_seq, PedsList_seq)
+
+        # Will be used for error calculation
+        orig_x_seq = x_seq.clone()
+
+        # Grid mask calculation
+        if sample_args.method == 2:  # obstacle lstm
+            grid_seq = getSequenceGridMask(x_seq, dataset_data, PedsList_seq, saved_args.neighborhood_size,
+                                           saved_args.grid_size, saved_args.use_cuda, True)
+        elif sample_args.method == 1:  # social lstm
+            grid_seq = getSequenceGridMask(x_seq, dataset_data, PedsList_seq, saved_args.neighborhood_size,
+                                           saved_args.grid_size, saved_args.use_cuda)
+
+        # Vectorize datapoints
+        x_seq, first_values_dict = vectorize_seq(x_seq, PedsList_seq, lookup_seq)
+
+        # *CUDA*
+        if sample_args.use_cuda:
+            x_seq = x_seq.cuda()
+            first_values_dict = {k: v.cuda() for k, v in first_values_dict.items()}
+            orig_x_seq = orig_x_seq.cuda()
+
+        # The sample function
+        if sample_args.method == 3:  # vanilla lstm
+            # Extract the observed part of the trajectories
+            obs_traj, obs_PedsList_seq = x_seq[:sample_args.obs_length], PedsList_seq[:sample_args.obs_length]
+            ret_x_seq = sample(obs_traj, obs_PedsList_seq, sample_args, net, x_seq, PedsList_seq, saved_args,
+                               dataset_data, test_loader, lookup_seq, numPedsList_seq, sample_args.gru)
+
+        else:
+            # Extract the observed part of the trajectories
+            obs_traj, obs_PedsList_seq, obs_grid = x_seq[:sample_args.obs_length], PedsList_seq[
+                                                                                   :sample_args.obs_length], grid_seq[
+                                                                                                             :sample_args.obs_length]
+            ret_x_seq = sample(obs_traj, obs_PedsList_seq, sample_args, net, x_seq, PedsList_seq, saved_args,
+                               dataset_data, test_loader, lookup_seq, numPedsList_seq, sample_args.gru, obs_grid)
+
+        # revert the points back to original space
+        ret_x_seq = revert_seq(ret_x_seq, PedsList_seq, lookup_seq, first_values_dict)
+
+        # *CUDA*
+        if sample_args.use_cuda:
+            ret_x_seq = ret_x_seq.cuda()
+
+        # *ORIGINAL TEST*
+        total_error += get_mean_error(ret_x_seq[sample_args.obs_length:].data,
+                                      orig_x_seq[sample_args.obs_length:].data,
+                                      PedsList_seq[sample_args.obs_length:],
+                                      PedsList_seq[sample_args.obs_length:],
+                                      sample_args.use_cuda, lookup_seq)
+
+        final_error += get_final_error(ret_x_seq[sample_args.obs_length:].data,
+                                       orig_x_seq[sample_args.obs_length:].data,
+                                       PedsList_seq[sample_args.obs_length:],
+                                       PedsList_seq[sample_args.obs_length:], lookup_seq)
+
+        # *Kevin Murphy*
+        norm_l2_dists += get_normalized_l2_distance(ret_x_seq[:sample_args.obs_length].data,
+                                                    orig_x_seq[:sample_args.obs_length].data,
+                                                    PedsList_seq[:sample_args.obs_length],
+                                                    PedsList_seq[:sample_args.obs_length],
+                                                    sample_args.use_cuda, lookup_seq)
+
+        end = time.time()
+
+        print('Current file : ', folder_name, ' Processed trajectory number : ', batch_idx + 1, 'out of', num_batches,
+              'trajectories in time', end - start)
+    return total_error, final_error, norm_l2_dists
 
 
 def test(sample_args, _run):
@@ -85,16 +184,16 @@ def test(sample_args, _run):
     seq_len = sample_args.seq_length
 
     # Determine the test files path
-    path = 'data/original/test/'
+    path = 'data/basketball/test/'
     files_list = [f for f in listdir(path) if isfile(join(path, f))]
     # Concat datasets associated to the files in train path
-    all_datasets = ConcatDataset([TrajectoryDataset(join(path, file)) for file in files_list])
+    all_datasets = ConcatDataset([TrajectoryDataset(join(path, file), 50, 5) for file in files_list])
     # Create the data loader object
-    test_loader = DataLoader(all_datasets, batch_size=sample_args.batch_size, shuffle=False, num_workers=0,
+    test_loader = DataLoader(all_datasets, batch_size=sample_args.batch_size, shuffle=False, num_workers=4,
                              pin_memory=False,
                              collate_fn=lambda x: x)
 
-    num_batches = math.floor(test_loader.dataset.cummulative_sizes[-1] / sample_args.batch_size)
+    num_batches = math.floor(len(test_loader.dataset) / sample_args.batch_size)
 
     smallest_err = 100000
     smallest_err_iter_num = -1
@@ -103,6 +202,7 @@ def test(sample_args, _run):
 
     submission_store = []  # store submission data points (txt)
     result_store = []  # store points for plotting
+
 
     for iteration in range(sample_args.iteration):
         # Initialize net
@@ -122,99 +222,23 @@ def test(sample_args, _run):
         else:
             raise ValueError('Incorrect checkpoint: file does not exist')
 
-        # For each batch
-        iteration_submission = []
-        iteration_result = []
-        results = []
-        submission = []
+    total_error, final_error, norm_l2_dists = testHelper(net, test_loader, sample_args, saved_args)
 
-        # Variable to maintain total error
-        total_error = 0
-        final_error = 0
+    if total_error < smallest_err:
+        # print("**********************************************************")
+        # print('Best iteration has been changed. Previous best iteration: ', smallest_err_iter_num + 1, 'Error: ', smallest_err / num_batches)
+        # print('New best iteration : ', iteration + 1, 'Error: ',total_error / num_batches)
+        smallest_err_iter_num = iteration
+        smallest_err = total_error
 
-        for batch_idx, batch in enumerate(test_loader):
-            start = time.time()
-
-            # Get the sequence
-            x_seq, numPedsList_seq, PedsList_seq, folder_path = batch[0]  # because source code assumes batch_size=0 and doesn't iterate over sequences of a batch
-
-            # Get processing file name and then get dimensions of file
-            folder_name = folder_path.split('/')[-1]
-            dataset_data = dataset_dimensions[folder_name]
-
-            # Dense vector creation
-            x_seq, lookup_seq = convert_to_tensor(x_seq, PedsList_seq)
-
-            # Will be used for error calculation
-            orig_x_seq = x_seq.clone()
-
-            # Grid mask calculation
-            if sample_args.method == 2:  # obstacle lstm
-                grid_seq = getSequenceGridMask(x_seq, dataset_data, PedsList_seq, saved_args.neighborhood_size,
-                                               saved_args.grid_size, saved_args.use_cuda, True)
-            elif sample_args.method == 1:  # social lstm
-                grid_seq = getSequenceGridMask(x_seq, dataset_data, PedsList_seq, saved_args.neighborhood_size,
-                                               saved_args.grid_size, saved_args.use_cuda)
-
-            # Vectorize datapoints
-            x_seq, first_values_dict = vectorize_seq(x_seq, PedsList_seq, lookup_seq)
-
-            # *CUDA*
-            if sample_args.use_cuda:
-                x_seq = x_seq.cuda()
-                first_values_dict = {k: v.cuda() for k, v in first_values_dict.items()}
-                orig_x_seq = orig_x_seq.cuda()
-
-            # The sample function
-            if sample_args.method == 3:  # vanilla lstm
-                # Extract the observed part of the trajectories
-                obs_traj, obs_PedsList_seq = x_seq[:sample_args.obs_length], PedsList_seq[:sample_args.obs_length]
-                ret_x_seq = sample(obs_traj, obs_PedsList_seq, sample_args, net, x_seq, PedsList_seq, saved_args,
-                                   dataset_data, test_loader, lookup_seq, numPedsList_seq, sample_args.gru)
-
-            else:
-                # Extract the observed part of the trajectories
-                obs_traj, obs_PedsList_seq, obs_grid = x_seq[:sample_args.obs_length], PedsList_seq[
-                                                                                       :sample_args.obs_length], grid_seq[
-                                                                                                                 :sample_args.obs_length]
-                ret_x_seq = sample(obs_traj, obs_PedsList_seq, sample_args, net, x_seq, PedsList_seq, saved_args,
-                                   dataset_data, test_loader, lookup_seq, numPedsList_seq, sample_args.gru, obs_grid)
-
-            # revert the points back to original space
-            ret_x_seq = revert_seq(ret_x_seq, PedsList_seq, lookup_seq, first_values_dict)
-
-            # *CUDA*
-            if sample_args.use_cuda:
-                ret_x_seq = ret_x_seq.cuda()
-
-            # *ORIGINAL TEST*
-            total_error += get_mean_error(ret_x_seq[sample_args.obs_length:].data,
-                                          orig_x_seq[sample_args.obs_length:].data,
-                                          PedsList_seq[sample_args.obs_length:],
-                                          PedsList_seq[sample_args.obs_length:],
-                                          sample_args.use_cuda, lookup_seq)
-
-            final_error += get_final_error(ret_x_seq[sample_args.obs_length:].data,
-                                           orig_x_seq[sample_args.obs_length:].data,
-                                           PedsList_seq[sample_args.obs_length:],
-                                           PedsList_seq[sample_args.obs_length:], lookup_seq)
-
-            end = time.time()
-
-            print('Current file : ', folder_name,' Processed trajectory number : ', batch_idx + 1, 'out of', num_batches, 'trajectories in time', end - start)
-
-        if total_error < smallest_err:
-            #print("**********************************************************")
-            #print('Best iteration has been changed. Previous best iteration: ', smallest_err_iter_num + 1, 'Error: ', smallest_err / num_batches)
-            # print('New best iteration : ', iteration + 1, 'Error: ',total_error / num_batches)
-            smallest_err_iter_num = iteration
-            smallest_err = total_error
-
-        print('Iteration:', iteration + 1, ' Total testing mean error of the predicted part is ',
-              total_error / num_batches)
-        print('Iteration:', iteration + 1, 'Total testing final error of the predicted part is ',
-              final_error / num_batches)
-
+    print('Iteration:', iteration + 1, ' Total testing mean error of the predicted part is ',
+          total_error / num_batches)
+    print('Iteration:', iteration + 1, 'Total testing final error of the predicted part is ',
+          final_error / num_batches)
+    # *Kevin Murphy*
+    norm_l2_dists = norm_l2_dists / num_batches
+    for i in range(sample_args.obs_length):
+        print('Normalized l2 distances for step %d is %f' % (i, norm_l2_dists.data[i]))
     print('Smallest error iteration:', smallest_err_iter_num + 1)
 
 
@@ -275,8 +299,8 @@ def sample(x_seq, Pedlist, args, net, true_x_seq, true_Pedlist, saved_args, dime
             ret_x_seq[tstep + 1, :, 0] = next_x
             ret_x_seq[tstep + 1, :, 1] = next_y
 
-        # *OVERFIT TEST*
-        ret_x_seq[:args.obs_length, :, :] = x_seq.clone()
+        # *Kevin Murphy*
+        #ret_x_seq[:args.obs_length, :, :] = x_seq.clone()
 
         # Last seen grid
         if grid is not None:  # no vanilla lstm

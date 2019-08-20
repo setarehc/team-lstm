@@ -3,6 +3,7 @@ from torch.utils.data import Dataset, DataLoader, ConcatDataset
 import pandas as pd
 import numpy as np
 import itertools
+import math
 
 dataset_dimensions = {'hotel.txt': [720, 576], 'eth.txt': [720, 576],
                                    'ucy.txt': [720, 576], 'zara01.txt': [720, 576],
@@ -40,16 +41,17 @@ def convert_to_tensor(seq_data, persons_list):
 
 class TrajectoryDataset(Dataset):
 
-    def __init__(self, filename, seq_length=20):
+    def __init__(self, filename, seq_length=20, keep_every=1):
 
         self.filename = filename
-        self.seq_length = seq_length
+        self.seq_length = seq_length  # Original dataset sequence length (ped_data = 20 and basketball_data = 50)
+        self.keep_every = keep_every  # Keeps every keep_every entries of the input dataset (to recreate Kevin Murphy's work, needs be set to 5)
 
         print('Now processing: ', filename)
 
-        self.frame_to_data, self.frame_list, self.frame_to_num_persons, self.frame_to_persons, self.orig_data, self.idx_to_person, self.person_to_frames = self.frame_preprocess(self.filename)
+        self.frame_to_data, self.frame_list, self.frame_to_num_persons, self.frame_to_persons, self.orig_data, self.idx_to_person, self.person_to_frames = self.frame_preprocess()
 
-    def frame_preprocess(self, filename):
+    def frame_preprocess(self):
         '''
         Function that will pre-process the input data file
         :param
@@ -61,12 +63,12 @@ class TrajectoryDataset(Dataset):
         # Copy of the original data
         orig_data = []
 
-        df = pd.read_csv(filename, dtype={'frame_num': 'int', 'person_id': 'int'}, delimiter=' ', header=None,
+        df = pd.read_csv(self.filename, dtype={'frame_num': 'int', 'person_id': 'int'}, delimiter=' ', header=None,
                          names=column_names)
         # Sort dataframe based on ped_id and then by frame_num
         df = df.sort_values(by=['person_id', 'frame_num'])
 
-        # Keep only the sequences of length 20
+        # Keep only the sequences of length self.seq_length
         gdf = df.groupby(['person_id'])
         for ped_id, group in gdf:
             group_count = group['person_id'].count()
@@ -75,6 +77,10 @@ class TrajectoryDataset(Dataset):
             elif group_count > self.seq_length:
                 excess_count = group_count - self.seq_length
                 df = df.drop((group.index[-excess_count:]))
+
+        # Keep every self.keep_every entries of the input dataset
+        del_list = [idx for idx in list(df.index.data) if idx % self.keep_every != 0]
+        df = df.drop(df.index[del_list])
 
         target_ids = np.array(df.drop_duplicates(subset={'person_id'}, keep='first', inplace=False)['person_id'])
 
@@ -128,6 +134,8 @@ class TrajectoryDataset(Dataset):
         idx: index of sequence to be returned
         """
         # Go from sequence/person index to person_id
+        if isinstance(idx, torch.Tensor):
+            idx = idx.item()
         target_id = self.idx_to_person[idx]
         frame_list = self.person_to_frames[target_id]
 
@@ -144,35 +152,33 @@ class TrajectoryDataset(Dataset):
         return len(self.person_to_frames)
 
 
-
-
 # Test Block
-'''
-from os import listdir
-from os.path import isfile, join
-path = 'data/original/train/'
-files_list = [f for f in listdir(path) if isfile(join(path, f))]
-batch_size = 5
-all_datasets = ConcatDataset([PedTrajectoryDataset(join(path, file)) for file in files_list])
+if __name__ == '__main__':
+    from os import listdir
+    from os.path import isfile, join
+    path = 'data/original/train/'
+    files_list = [f for f in listdir(path) if isfile(join(path, f))]
+    batch_size = 5
+    all_datasets = ConcatDataset([TrajectoryDataset(join(path, file)) for file in files_list])
 
-train_loader = DataLoader(all_datasets, batch_size=batch_size, shuffle=False, num_workers=0, pin_memory=False, collate_fn=lambda x: x)
+    train_loader = DataLoader(all_datasets, batch_size=batch_size, shuffle=False, num_workers=0, pin_memory=False, collate_fn=lambda x: x)
 
-print(len(train_loader))
+    print(len(train_loader))
 
-for batch_idx, batch in enumerate(train_loader):
-    if len(batch) < 5:
-        print(batch_idx)
+    for batch_idx, batch in enumerate(train_loader):
+        if len(batch) < 5:
+            print(batch_idx)
 
 
-d = PedTrajectoryDataset('data/original/train/hotel.txt')
-batch_size = 5
-#assert batch_size == 1
-dataloader = DataLoader(d, batch_size=batch_size, shuffle=False, num_workers=0, pin_memory=False, collate_fn=lambda x: x)
+    d = TrajectoryDataset('data/original/train/hotel.txt', keep_every=2)
+    batch_size = 5
+    #assert batch_size == 1
+    dataloader = DataLoader(d, batch_size=batch_size, shuffle=False, num_workers=0, pin_memory=False, collate_fn=lambda x: x)
 
-print(len(dataloader))
+    print(len(dataloader))
 
-for batch_idx, batch in enumerate(dataloader):
-    if batch_idx == 24:
-        for i in range(batch_size):
-            tuple = batch[i]
-'''
+    for batch_idx, batch in enumerate(dataloader):
+        if batch_idx == 24:
+            for i in range(batch_size):
+                tuple = batch[i]
+

@@ -2,6 +2,9 @@ from sacred import Ingredient
 
 data_ingredient = Ingredient('common')
 
+dataset_path_dict = {'basketball': 'data/basketball/train',
+                     'basketball_small': 'data/basketball/small_train'}
+
 @data_ingredient.config
 def cfg():
     input_size = 2
@@ -11,9 +14,9 @@ def cfg():
     rnn_size = 128  # size of RNN hidden state
 
     # Length of sequence to be considered parameter
-    seq_length = 20  # RNN sequence length
-    obs_length = 8  # observation length
-    pred_length = 12  # prediction length
+    seq_length = 10  # RNN sequence length
+    obs_length = 6  # observation length
+    pred_length = 4  # prediction length
 
     # Dimension of the embeddings parameter
     embedding_size = 64  # Embedding dimension for the spatial coordinates

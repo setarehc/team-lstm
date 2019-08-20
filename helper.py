@@ -11,6 +11,10 @@ from model import SocialModel
 from olstm_model import OLSTMModel
 from vlstm_model import VLSTMModel
 
+from os import listdir
+from os.path import isfile, join
+from trajectory_dataset import *
+
 
 
 #one time set dictionary for a exist key
@@ -80,7 +84,7 @@ def sample_gaussian_2d(mux, muy, sx, sy, corr, nodesPresent, look_up):
         if node not in converted_node_present:
             continue
         mean = [o_mux[node], o_muy[node]]
-        cov = [[o_sx[node]*o_sx[node], o_corr[node]*o_sx[node]*o_sy[node]], 
+        cov = [[o_sx[node]*o_sx[node], o_corr[node]*o_sx[node]*o_sy[node]],
                 [o_corr[node]*o_sx[node]*o_sy[node], o_sy[node]*o_sy[node]]]
 
         mean = np.array(mean, dtype='float')
@@ -127,7 +131,6 @@ def get_mean_error(ret_nodes, nodes, assumedNodesPresent, trueNodesPresent, usin
                 continue
 
             ped_idx = look_up[ped_id]
-
 
             pred_pos = ret_nodes[frame_idx, ped_idx, :]
             true_pos = nodes[frame_idx, ped_idx, :]
@@ -178,16 +181,16 @@ def get_final_error(ret_nodes, nodes, assumedNodesPresent, trueNodesPresent, loo
 
         ped_idx = look_up[ped_id]
 
-        
+
         pred_pos = ret_nodes[tstep, ped_idx, :]
         true_pos = nodes[tstep, ped_idx, :]
-        
+
         error += torch.norm(pred_pos - true_pos, p=2)
         num_peds_in_frame += 1
-        
+
     if num_peds_in_frame > 1:
         error = error / num_peds_in_frame
-            
+
     return error
 
 def Gaussian2DLikelihoodInference(outputs, targets, nodesPresent, pred_length, look_up):
@@ -328,7 +331,7 @@ def delete_file(path, file_name_list):
                 os.remove(file_path)
                 print("File succesfully deleted: ", file_path)
             else:    ## Show an error ##
-                print("Error: %s file not found" % file_path)        
+                print("Error: %s file not found" % file_path)
         except OSError as e:  ## if failed, report it back to the user ##
             print ("Error: %s - %s." % (e.filename,e.strerror))
 
@@ -409,7 +412,7 @@ def time_lr_scheduler(optimizer, epoch, lr_decay=0.5, lr_decay_epoch=10):
     """Decay learning rate by a factor of lr_decay every lr_decay_epoch epochs"""
     if epoch % lr_decay_epoch:
         return optimizer
-    
+
     print("Optimizer learning rate has been decreased.")
 
     for param_group in optimizer.param_groups:
@@ -543,3 +546,89 @@ def rotate_traj_with_target_ped(x_seq, angle, PedsList_seq, lookup_seq):
             vectorized_x_seq[ind, lookup_seq[ped], 0] = rotated_point[0]
             vectorized_x_seq[ind, lookup_seq[ped], 1] = rotated_point[1]
     return vectorized_x_seq
+
+
+# *Kevin Murphy*
+def get_normalized_l2_distance(ret_nodes, nodes, assumedNodesPresent, trueNodesPresent, use_cuda, look_up):
+    '''
+    Parameters
+    ==========
+
+    ret_nodes : A tensor of shape pred_length x numNodes x 2
+    Contains the predicted positions for the nodes
+
+    nodes : A tensor of shape pred_length x numNodes x 2
+    Contains the true positions for the nodes
+
+    nodesPresent lists: A list of lists, of size pred_length
+    Each list contains the nodeIDs of the nodes present at that time-step
+
+    look_up : lookup table for determining which ped is in which array index
+
+    Returns
+    =======
+
+    Error : normalized euclidean distance between predicted trajectory and the true trajectory
+    '''
+    pred_length = ret_nodes.size()[0]
+    error = torch.zeros(pred_length)
+
+    if use_cuda:
+        error = error.cuda()
+
+    for frame_idx in range(pred_length):
+        num_peds_in_frame = 0
+
+        for ped_id in assumedNodesPresent[frame_idx]:
+            ped_id = int(ped_id)
+
+            if ped_id not in trueNodesPresent[frame_idx]:
+                continue
+
+            ped_idx = look_up[ped_id]
+
+            pred_pos = ret_nodes[frame_idx, ped_idx, :]
+            true_pos = nodes[frame_idx, ped_idx, :]
+
+            norm_pred_pos = (pred_pos / get_size(pred_pos)) if get_size(pred_pos) != 0 else pred_pos
+            norm_true_pos = (true_pos / get_size(true_pos)) if get_size(true_pos) != 0 else true_pos
+            normalized_l2_dist = torch.norm(norm_pred_pos - norm_true_pos, p=2)
+
+            error[frame_idx] += normalized_l2_dist
+            num_peds_in_frame += 1
+
+        if num_peds_in_frame > 1:
+            error[frame_idx] = error[frame_idx] / num_peds_in_frame
+
+    return error
+
+
+def get_size(tensor):
+    '''
+    Returns size of input tensor
+    :return: size(tensor)
+    '''
+    return torch.norm(tensor)
+
+def loadData(dataset_path, seq_length, keep_every, valid_percentage, batch_size):
+    '''
+    Dataset that creates and returns train/validation dataloaders of all datasets in dataset path
+    :param dataset_path: path of datasets
+    :param seq_length: original dataset sequence length (ped_data = 20 and basketball_data = 50)
+    :param keep_every: # keeps every keep_every entries of the input dataset (to recreate Kevin Murphy's work, needs be set to 5)
+    :param valid_percentage: percentage of validation data
+    :return: train_loader and valid_loader
+    '''
+    # Determine the train files path
+    files_list = [f for f in listdir(dataset_path) if isfile(join(dataset_path, f))]
+    # Concat datasets associated to the files in train path
+    all_datasets = ConcatDataset([TrajectoryDataset(join(dataset_path, file), 50, 5) for file in files_list])
+    valid_size = int(len(all_datasets) * valid_percentage / 100)
+    train_size = len(all_datasets) - valid_size
+    train_dataset, valid_dataset = torch.utils.data.random_split(all_datasets, [train_size, valid_size])
+    # Create the data loader objects
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=False,
+                              collate_fn=lambda x: x)
+    valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False, num_workers=0, pin_memory=False,
+                              collate_fn=lambda x: x)
+    return train_loader, valid_loader
