@@ -11,7 +11,7 @@ from trajectory_dataset import *
 from os import listdir
 from os.path import isfile, join
 
-ex = sacred.Experiment('test', ingredients=[utils.data_ingredient])
+ex = sacred.Experiment('test', ingredients=[utils.common_ingredient, utils.dataset_ingredient])
 #ex.observers.append(MongoObserver.create(url='localhost:27017', db_name='MY_DB'))
 
 
@@ -21,7 +21,7 @@ def cfg():
     batch_size = 1
 
     # Model to be loaded
-    epoch = 0  # 'Epoch of model to be loaded'
+    epoch = 29  # 'Epoch of model to be loaded'
 
     # Number of iteration -> we are trying many times to get lowest test error derived from observed part and prediction of observed
     # part.Currently it is useless because we are using direct copy of observed part and no use of prediction.Test error will be 0.
@@ -36,6 +36,12 @@ def init(seed, config, _run):
     common_config = config['common']
     config.pop('common')
     for k, v in common_config.items():
+        assert k not in config
+        config[k] = v
+
+    dataset_config = config['dataset']
+    config.pop('dataset')
+    for k, v in dataset_config.items():
         assert k not in config
         config[k] = v
 
@@ -70,7 +76,7 @@ def testHelper(net, test_loader, sample_args, saved_args):
             0]  # because source code assumes batch_size=0 and doesn't iterate over sequences of a batch
 
         # Get processing file name and then get dimensions of file
-        folder_name = folder_path.split('/')[-3]
+        folder_name = get_folder_name(folder_path, sample_args.dataset)
         dataset_data = dataset_dimensions[folder_name]
 
         # Dense vector creation
@@ -185,13 +191,7 @@ def test(sample_args, _run):
 
     # Determine the test files path
     path = 'data/basketball/test/'
-    files_list = [f for f in listdir(path) if isfile(join(path, f))]
-    # Concat datasets associated to the files in train path
-    all_datasets = ConcatDataset([TrajectoryDataset(join(path, file), 50, 5) for file in files_list])
-    # Create the data loader object
-    test_loader = DataLoader(all_datasets, batch_size=sample_args.batch_size, shuffle=False, num_workers=4,
-                             pin_memory=False,
-                             collate_fn=lambda x: x)
+    test_loader, _ = loadData(path, sample_args.orig_seq_len, sample_args.keep_every, 0, sample_args.batch_size)
 
     num_batches = math.floor(len(test_loader.dataset) / sample_args.batch_size)
 

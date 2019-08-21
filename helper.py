@@ -622,7 +622,7 @@ def loadData(dataset_path, seq_length, keep_every, valid_percentage, batch_size)
     # Determine the train files path
     files_list = [f for f in listdir(dataset_path) if isfile(join(dataset_path, f))]
     # Concat datasets associated to the files in train path
-    all_datasets = ConcatDataset([TrajectoryDataset(join(dataset_path, file), 50, 5) for file in files_list])
+    all_datasets = ConcatDataset([TrajectoryDataset(join(dataset_path, file), seq_length, keep_every) for file in files_list])
     valid_size = int(len(all_datasets) * valid_percentage / 100)
     train_size = len(all_datasets) - valid_size
     train_dataset, valid_dataset = torch.utils.data.random_split(all_datasets, [train_size, valid_size])
@@ -632,3 +632,7 @@ def loadData(dataset_path, seq_length, keep_every, valid_percentage, batch_size)
     valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False, num_workers=0, pin_memory=False,
                               collate_fn=lambda x: x)
     return train_loader, valid_loader
+
+def get_folder_name(folder_path, dataset):
+    flag = (dataset == 'basketball' or dataset == 'basketball_small')
+    return folder_path.split('/')[-3] if flag else folder_path.split('/')[-1]

@@ -10,7 +10,7 @@ from sacred.observers import MongoObserver
 from trajectory_dataset import *
 from test import testHelper
 
-ex = sacred.Experiment('train', ingredients=[utils.data_ingredient])
+ex = sacred.Experiment('train', ingredients=[utils.common_ingredient, utils.dataset_ingredient])
 ex.observers.append(MongoObserver.create(url='localhost:27017', db_name='MY_DB'))
 
 @ex.config
@@ -61,16 +61,18 @@ def cfg():
     # Method selection
     method = 1  # 'Method of lstm will be used (1 = social lstm, 2 = obstacle lstm, 3 = vanilla lstm)'
 
-    dataset = 'basketball'
-    assert dataset in utils.dataset_path_dict
-    dataset_path = utils.dataset_path_dict[dataset]
-
 
 def init(seed, config, _run):
     # Next five lines are to call args.seq_length instead of args.common.seq_length
     common_config = config['common']
     config.pop('common')
     for k, v in common_config.items():
+        assert k not in config
+        config[k] = v
+
+    dataset_config = config['dataset']
+    config.pop('dataset')
+    for k, v in dataset_config.items():
         assert k not in config
         config[k] = v
 
@@ -98,7 +100,7 @@ def train(args, _run):
     validation_epoch_list = list(range(args.freq_validation, args.num_epochs + 1, args.freq_validation))
     validation_epoch_list[-1] -= 1
 
-    train_loader, valid_loader = loadData(args.dataset_path, 50, 5, args.valid_percentage, args.batch_size)
+    train_loader, valid_loader = loadData(args.dataset_path, args.orig_seq_len, args.keep_every, args.valid_percentage, args.batch_size)
 
     model_name = "LSTM"
     method_name = "SOCIALLSTM"
@@ -117,7 +119,7 @@ def train(args, _run):
     log_file = open(os.path.join(log_directory, method_name, model_name, 'val.txt'), 'w+')
 
     # model directory
-    save_directory = os.path.join(prefix, 'model/')
+    save_directory = os.path.join(prefix, 'model_test/')
 
     # Save the arguments int the config file
     with open(os.path.join(save_directory, method_name, model_name, 'config.pkl'), 'wb') as f:
@@ -166,7 +168,7 @@ def train(args, _run):
                 x_seq, lookup_seq = convert_to_tensor(x_seq, PedsList_seq)
 
                 # Get processing file name and then get dimensions of file
-                folder_name = folder_path.split('/')[-3]
+                folder_name = get_folder_name(folder_path, args.dataset)
                 dataset_data = dataset_dimensions[folder_name]
 
                 # Grid mask calculation and storage depending on grid parameter
@@ -244,6 +246,7 @@ def train(args, _run):
         # Validate
         if len(valid_loader) > 0:
             valid_loss = validLoss(net, valid_loader, args)
+            print('valid loss = ', valid_loss)
             total_error, final_error, norm_l2_dists = testHelper(net, valid_loader, args, args)
             total_error = total_error.item() if isinstance(total_error, torch.Tensor) else total_error
             final_error = final_error.item() if isinstance(final_error, torch.Tensor) else final_error
@@ -271,7 +274,6 @@ def validLoss(net, valid_loader, args):
     Calculates log-likelihood loss on validation dataset
     :return: average log-likelihood loss
     '''
-
     num_seen_sequences = 0
 
     for batch_idx, batch in enumerate(valid_loader):
@@ -292,7 +294,7 @@ def validLoss(net, valid_loader, args):
             x_seq, lookup_seq = convert_to_tensor(x_seq, PedsList_seq)
 
             # Get processing file name and then get dimensions of file
-            folder_name = folder_path.split('/')[-3]
+            folder_name = get_folder_name(folder_path, args.dataset)
             dataset_data = dataset_dimensions[folder_name]
 
             # Grid mask calculation and storage depending on grid parameter
