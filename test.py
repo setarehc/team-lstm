@@ -174,7 +174,7 @@ def test(sample_args, _run):
     #print("Selected method name: ", method_name, " model name: ", model_name)
 
     # Save directory
-    save_directory = os.path.join(f_prefix, 'model/', method_name, model_name)
+    save_directory = os.path.join(f_prefix, sample_args.save_dir, method_name, model_name)
     #plot directory for plotting in the future
     plot_directory = os.path.join(f_prefix, 'plot/', method_name, model_name)
 

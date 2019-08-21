@@ -29,6 +29,9 @@ def commonCfg():
     # drive option
     drive = False   # Use Google drive or not
 
+    # Model will be saved in this directory
+    save_dir = 'model'
+
 
 @dataset_ingredient.config
 def datasetCfg():

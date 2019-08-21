@@ -62,6 +62,7 @@ def cfg():
     method = 1  # 'Method of lstm will be used (1 = social lstm, 2 = obstacle lstm, 3 = vanilla lstm)'
 
 
+
 def init(seed, config, _run):
     # Next five lines are to call args.seq_length instead of args.common.seq_length
     common_config = config['common']
@@ -119,7 +120,7 @@ def train(args, _run):
     log_file = open(os.path.join(log_directory, method_name, model_name, 'val.txt'), 'w+')
 
     # model directory
-    save_directory = os.path.join(prefix, 'model_test/')
+    save_directory = os.path.join(prefix, args.save_dir)
 
     # Save the arguments int the config file
     with open(os.path.join(save_directory, method_name, model_name, 'config.pkl'), 'wb') as f:
