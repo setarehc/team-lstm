@@ -21,7 +21,7 @@ def cfg():
     batch_size = 1
 
     # Model to be loaded
-    epoch = 29  # 'Epoch of model to be loaded'
+    epoch = 99  # 'Epoch of model to be loaded'
 
     # Number of iteration -> we are trying many times to get lowest test error derived from observed part and prediction of observed
     # part.Currently it is useless because we are using direct copy of observed part and no use of prediction.Test error will be 0.
@@ -93,7 +93,7 @@ def testHelper(net, test_loader, sample_args, saved_args):
             grid_seq = getSequenceGridMask(x_seq, dataset_data, PedsList_seq, saved_args.neighborhood_size,
                                            saved_args.grid_size, saved_args.use_cuda)
 
-        # Vectorize datapoints
+        # Replace relative positions with true positions in x_seq
         x_seq, first_values_dict = vectorize_seq(x_seq, PedsList_seq, lookup_seq)
 
         # *CUDA*
@@ -190,8 +190,7 @@ def test(sample_args, _run):
     seq_len = sample_args.seq_length
 
     # Determine the test files path
-    path = 'data/basketball/test/'
-    test_loader, _ = loadData(path, sample_args.orig_seq_len, sample_args.keep_every, 0, sample_args.batch_size)
+    test_loader, _ = loadData(sample_args.test_dataset_path, sample_args.orig_seq_len, sample_args.keep_every, 0, sample_args.batch_size, 0)
 
     num_batches = math.floor(len(test_loader.dataset) / sample_args.batch_size)
 
@@ -318,7 +317,12 @@ def sample(x_seq, Pedlist, args, net, true_x_seq, true_Pedlist, saved_args, dime
                                                           cell_states, [true_Pedlist[tstep]], [num_pedlist[tstep]],
                                                           test_loader, look_up)
             else:
-                outputs, hidden_states, cell_states = net(ret_x_seq[tstep].view(1, numx_seq, 2), [prev_grid],
+                if tstep == args.obs_length - 1:
+                    outputs, hidden_states, cell_states = net(x_seq[tstep].view(1, numx_seq, 2), [prev_grid],
+                                                              hidden_states, cell_states, [true_Pedlist[tstep]],
+                                                              [num_pedlist[tstep]], test_loader, look_up)
+                else:
+                    outputs, hidden_states, cell_states = net(ret_x_seq[tstep].view(1, numx_seq, 2), [prev_grid],
                                                           hidden_states, cell_states, [true_Pedlist[tstep]],
                                                           [num_pedlist[tstep]], test_loader, look_up)
 

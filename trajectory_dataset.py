@@ -14,11 +14,11 @@ dataset_dimensions = {'hotel.txt': [720, 576], 'eth.txt': [720, 576],
 
 def convert_to_tensor(seq_data, persons_list):
     """
-    Function that converts seq_data into a tensor of size (20, max_num_persons, 2) and a look-up table
+    Function that converts seq_data into a tensor of size (seq_len, max_num_persons, 2) and a look-up table
     max_num_persons = maximum number of persons present in all of the frames of the sequence
     For people not present in a frame, x and y values are set to 0
     :return:
-    tensor_seq_data: tensor sequence data of size (20, max_num_persons, 2)
+    tensor_seq_data: tensor sequence data of size (seq_len, max_num_persons, 2)
     lookup_table: a table from person_id to the index in which it appears in the tensor_seq_data
     """
     # Get unique persons ids in the whole sequence
@@ -41,21 +41,19 @@ def convert_to_tensor(seq_data, persons_list):
 
 class TrajectoryDataset(Dataset):
 
-    def __init__(self, filename, seq_length=20, keep_every=1):
+    def __init__(self, folder_path, seq_length=20, keep_every=1):
 
-        self.filename = filename
+        self.folder_path = folder_path
         self.seq_length = seq_length  # Original dataset sequence length (ped_data = 20 and basketball_data = 50)
         self.keep_every = keep_every  # Keeps every keep_every entries of the input dataset (to recreate Kevin Murphy's work, needs be set to 5)
 
-        print('Now processing: ', filename)
+        print('Now processing: ', folder_path)
 
         self.frame_to_data, self.frame_list, self.frame_to_num_persons, self.frame_to_persons, self.orig_data, self.idx_to_person, self.person_to_frames = self.frame_preprocess()
 
     def frame_preprocess(self):
         '''
         Function that will pre-process the input data file
-        :param
-        filename: file path
         '''
 
         column_names = ['frame_num', 'person_id', 'y', 'x']
@@ -63,7 +61,7 @@ class TrajectoryDataset(Dataset):
         # Copy of the original data
         orig_data = []
 
-        df = pd.read_csv(self.filename, dtype={'frame_num': 'int', 'person_id': 'int'}, delimiter=' ', header=None,
+        df = pd.read_csv(self.folder_path, dtype={'frame_num': 'int', 'person_id': 'int'}, delimiter=' ', header=None,
                          names=column_names)
         # Sort dataframe based on ped_id and then by frame_num
         df = df.sort_values(by=['person_id', 'frame_num'])
@@ -143,9 +141,9 @@ class TrajectoryDataset(Dataset):
         seq_persons_list = [self.frame_to_persons[frame] for frame in frame_list]
         seq_num_persons_list = [self.frame_to_num_persons[frame] for frame in frame_list]
 
-        folder_name = self.filename
+        folder_path = self.folder_path
 
-        return seq_data, seq_num_persons_list, seq_persons_list, folder_name
+        return seq_data, seq_num_persons_list, seq_persons_list, folder_path
 
     def __len__(self):
         # Returns sequence length
@@ -154,6 +152,7 @@ class TrajectoryDataset(Dataset):
 
 # Test Block
 if __name__ == '__main__':
+    '''
     from os import listdir
     from os.path import isfile, join
     path = 'data/original/train/'
@@ -168,17 +167,17 @@ if __name__ == '__main__':
     for batch_idx, batch in enumerate(train_loader):
         if len(batch) < 5:
             print(batch_idx)
+    '''
 
-
-    d = TrajectoryDataset('data/original/train/hotel.txt', keep_every=2)
+    d = TrajectoryDataset('data/original/train/hotel.txt')
     batch_size = 5
     #assert batch_size == 1
     dataloader = DataLoader(d, batch_size=batch_size, shuffle=False, num_workers=0, pin_memory=False, collate_fn=lambda x: x)
 
     print(len(dataloader))
+    print(len(dataloader.dataset))
 
-    for batch_idx, batch in enumerate(dataloader):
-        if batch_idx == 24:
-            for i in range(batch_size):
-                tuple = batch[i]
+    for idx, batch in enumerate(dataloader):
+        if idx != len(batch):
+            x_seq, numPedsList_seq, PedsList_seq, folder_path = batch[0]
 

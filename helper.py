@@ -350,6 +350,7 @@ def create_directories(base_folder_path, folder_list):
         if not os.path.exists(directory):
             os.makedirs(directory)
 
+
 def unique_list(l):
   # get unique elements from list
   x = []
@@ -358,14 +359,16 @@ def unique_list(l):
       x.append(a)
   return x
 
+
 def angle_between(p1, p2):
     # return angle between two points
     ang1 = np.arctan2(*p1[::-1])
     ang2 = np.arctan2(*p2[::-1])
     return ((ang1 - ang2) % (2 * np.pi))
 
+
 def vectorize_seq(x_seq, PedsList_seq, lookup_seq):
-    #substract first frame value to all frames for a ped.Therefore, convert absolute pos. to relative pos.
+    # substract first frame value to all frames for a ped. Therefore, convert absolute pos. to relative pos.
     first_values_dict = WriteOnceDict()
     vectorized_x_seq = x_seq.clone()
     for ind, frame in enumerate(x_seq):
@@ -375,6 +378,7 @@ def vectorize_seq(x_seq, PedsList_seq, lookup_seq):
 
     return vectorized_x_seq, first_values_dict
 
+
 def translate(x_seq, PedsList_seq, lookup_seq, value):
     # translate al trajectories given x and y values
     vectorized_x_seq = x_seq.clone()
@@ -383,6 +387,7 @@ def translate(x_seq, PedsList_seq, lookup_seq, value):
             vectorized_x_seq[ind, lookup_seq[ped], 0:2]  = frame[lookup_seq[ped], 0:2] - value[0:2]
 
     return vectorized_x_seq
+
 
 def revert_seq(x_seq, PedsList_seq, lookup_seq, first_values_dict):
     # convert velocity array to absolute position array
@@ -610,7 +615,7 @@ def get_size(tensor):
     '''
     return torch.norm(tensor)
 
-def loadData(dataset_path, seq_length, keep_every, valid_percentage, batch_size):
+def loadData(dataset_path, seq_length, keep_every, valid_percentage, batch_size, max_val_size):
     '''
     Dataset that creates and returns train/validation dataloaders of all datasets in dataset path
     :param dataset_path: path of datasets
@@ -624,6 +629,8 @@ def loadData(dataset_path, seq_length, keep_every, valid_percentage, batch_size)
     # Concat datasets associated to the files in train path
     all_datasets = ConcatDataset([TrajectoryDataset(join(dataset_path, file), seq_length, keep_every) for file in files_list])
     valid_size = int(len(all_datasets) * valid_percentage / 100)
+    if valid_size > max_val_size:
+        valid_size = max_val_size
     train_size = len(all_datasets) - valid_size
     train_dataset, valid_dataset = torch.utils.data.random_split(all_datasets, [train_size, valid_size])
     # Create the data loader objects
@@ -633,6 +640,8 @@ def loadData(dataset_path, seq_length, keep_every, valid_percentage, batch_size)
                               collate_fn=lambda x: x)
     return train_loader, valid_loader
 
+
 def get_folder_name(folder_path, dataset):
-    flag = (dataset == 'basketball' or dataset == 'basketball_small')
-    return folder_path.split('/')[-3] if flag else folder_path.split('/')[-1]
+    if dataset == 'basketball' or dataset == 'basketball_small':
+        return folder_path.split('/')[-3]
+    return folder_path.split('/')[-1]
