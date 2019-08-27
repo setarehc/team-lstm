@@ -3,7 +3,6 @@ from torch.utils.data import Dataset, DataLoader, ConcatDataset
 import pandas as pd
 import numpy as np
 import itertools
-import math
 
 dataset_dimensions = {'hotel.txt': [720, 576], 'eth.txt': [720, 576],
                                    'ucy.txt': [720, 576], 'zara01.txt': [720, 576],
@@ -65,6 +64,11 @@ class TrajectoryDataset(Dataset):
                          names=column_names)
         # Sort dataframe based on ped_id and then by frame_num
         df = df.sort_values(by=['person_id', 'frame_num'])
+
+        # Normalize x and y values for basketball dataset
+        if self.folder_path.split('/')[-3] == 'basketball':
+            df['y'] = df['y'].div(dataset_dimensions['basketball'][1])
+            df['x'] = df['x'].div(dataset_dimensions['basketball'][0])
 
         # Keep only the sequences of length self.seq_length
         gdf = df.groupby(['person_id'])
