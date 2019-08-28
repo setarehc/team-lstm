@@ -283,6 +283,9 @@ def Gaussian2DLikelihood(outputs, targets, nodesPresent, look_up):
     # Numerical stability
     epsilon = 1e-20
 
+    #if torch.any(result > 1):
+    #    import pdb; pdb.set_trace()
+
     result = -torch.log(torch.clamp(result, min=epsilon))
 
     loss = 0
@@ -595,9 +598,17 @@ def get_normalized_l2_distance(ret_nodes, nodes, assumedNodesPresent, trueNodesP
             pred_pos = ret_nodes[frame_idx, ped_idx, :]
             true_pos = nodes[frame_idx, ped_idx, :]
 
-            norm_pred_pos = (pred_pos / get_size(pred_pos)) if get_size(pred_pos) != 0 else pred_pos
-            norm_true_pos = (true_pos / get_size(true_pos)) if get_size(true_pos) != 0 else true_pos
+            # Implementation based on resource 1 in guide.md:
+            norm_pred_pos = pred_pos#(pred_pos / get_size(pred_pos)) if get_size(pred_pos) != 0 else pred_pos
+            norm_true_pos = true_pos#(true_pos / get_size(true_pos)) if get_size(true_pos) != 0 else true_pos
             normalized_l2_dist = torch.norm(norm_pred_pos - norm_true_pos, p=2)
+
+            '''
+            # Implementation based on resource 2 in guide.md:
+            num = get_squared_norm((get_mean_shift(pred_pos)-get_mean_shift(true_pos)))
+            denom = get_squared_norm(get_mean_shift(pred_pos)) + get_squared_norm(get_mean_shift(true_pos))
+            normalized_l2_dist = 0.5 * num / denom
+            '''
 
             error[frame_idx] += normalized_l2_dist
             num_peds_in_frame += 1
@@ -607,6 +618,19 @@ def get_normalized_l2_distance(ret_nodes, nodes, assumedNodesPresent, trueNodesP
 
     return error
 
+def get_mean_shift(tensor):
+    '''
+    Returns mean shifted version of input tensor
+    :return: tensor - mean(tensor)
+    '''
+    return tensor - torch.mean(tensor)
+
+
+def get_squared_norm(tensor, p=2):
+    '''
+    Returns squared norm of input tensor
+    '''
+    return torch.norm(tensor, p=p) ** 2
 
 def get_size(tensor):
     '''
@@ -615,7 +639,7 @@ def get_size(tensor):
     '''
     return torch.norm(tensor)
 
-def loadData(dataset_path, seq_length, keep_every, valid_percentage, batch_size, max_val_size):
+def loadData(dataset_path, seq_length, keep_every, valid_percentage, batch_size, max_val_size, persons_to_keep):
     '''
     Dataset that creates and returns train/validation dataloaders of all datasets in dataset path
     :param dataset_path: path of datasets
@@ -627,7 +651,7 @@ def loadData(dataset_path, seq_length, keep_every, valid_percentage, batch_size,
     # Determine the train files path
     files_list = [f for f in listdir(dataset_path) if isfile(join(dataset_path, f))]
     # Concat datasets associated to the files in train path
-    all_datasets = ConcatDataset([TrajectoryDataset(join(dataset_path, file), seq_length, keep_every) for file in files_list])
+    all_datasets = ConcatDataset([TrajectoryDataset(join(dataset_path, file), seq_length, keep_every, persons_to_keep) for file in files_list])
     valid_size = int(len(all_datasets) * valid_percentage / 100)
     if valid_size > max_val_size:
         valid_size = max_val_size
@@ -638,6 +662,10 @@ def loadData(dataset_path, seq_length, keep_every, valid_percentage, batch_size,
                               collate_fn=lambda x: x)
     valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False, num_workers=0, pin_memory=False,
                               collate_fn=lambda x: x)
+
+    # Debug: overfit to a single sequence
+    #valid_loader = train_loader
+
     return train_loader, valid_loader
 
 

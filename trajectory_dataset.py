@@ -40,11 +40,12 @@ def convert_to_tensor(seq_data, persons_list):
 
 class TrajectoryDataset(Dataset):
 
-    def __init__(self, folder_path, seq_length=20, keep_every=1):
+    def __init__(self, folder_path, seq_length=20, keep_every=1, persons_to_keep=None):
 
         self.folder_path = folder_path
         self.seq_length = seq_length  # Original dataset sequence length (ped_data = 20 and basketball_data = 50)
         self.keep_every = keep_every  # Keeps every keep_every entries of the input dataset (to recreate Kevin Murphy's work, needs be set to 5)
+        self.persons_to_keep = persons_to_keep
 
         print('Now processing: ', folder_path)
 
@@ -65,10 +66,17 @@ class TrajectoryDataset(Dataset):
         # Sort dataframe based on ped_id and then by frame_num
         df = df.sort_values(by=['person_id', 'frame_num'])
 
+        # Keep only the self.persons_to_keep persons in the dataset
+        if self.persons_to_keep is not None:
+            gdf = df.groupby(['person_id'])
+            for ped_id, group in gdf:
+                if self.persons_to_keep[ped_id % 11] == 0:
+                    df = df.drop(group.index)
+
         # Normalize x and y values for basketball dataset
         if self.folder_path.split('/')[-3] == 'basketball':
-            df['y'] = df['y'].div(dataset_dimensions['basketball'][1])
-            df['x'] = df['x'].div(dataset_dimensions['basketball'][0])
+            df['y'] = df['y'].div(dataset_dimensions['basketball'][0])
+            df['x'] = df['x'].div(dataset_dimensions['basketball'][1])
 
         # Keep only the sequences of length self.seq_length
         gdf = df.groupby(['person_id'])

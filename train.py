@@ -103,7 +103,7 @@ def train(args, _run):
     validation_epoch_list = list(range(args.freq_validation, args.num_epochs + 1, args.freq_validation))
     validation_epoch_list[-1] -= 1
 
-    train_loader, valid_loader = loadData(args.train_dataset_path, args.orig_seq_len, args.keep_every, args.valid_percentage, args.batch_size, args.max_val_size)
+    train_loader, valid_loader = loadData(args.train_dataset_path, args.orig_seq_len, args.keep_every, args.valid_percentage, args.batch_size, args.max_val_size, args.persons_to_keep)
 
     model_name = "LSTM"
     method_name = "SOCIALLSTM"
@@ -202,6 +202,9 @@ def train(args, _run):
                 # Increment number of seen sequences
                 num_seen_sequences += 1
 
+                # Debug
+
+
                 # Compute loss
                 loss = Gaussian2DLikelihood(outputs, x_seq, PedsList_seq, lookup_seq)
                 loss_batch += loss.item()
@@ -235,29 +238,30 @@ def train(args, _run):
                 loss_batch, end - start))
 
             '''
-            # Validate
-            if batch_idx % 5000 == 0:
-                if len(valid_loader) > 0:
-                    #TEST
-                    t_dataset, _ = torch.utils.data.random_split(all_datasets, [1000, len(all_datasets)-1000])
-                    # Create the data loader objects
-                    t_loader = DataLoader(t_dataset, batch_size=args.batch_size, shuffle=False, num_workers=4,
-                                              pin_memory=False,
-                                              collate_fn=lambda x: x)
-                    t_loss = validLoss(net, t_loader, args)
-                    _run.log_scalar(metric_name='t.loss', value=t_loss, step=epoch + batch_idx / num_batches)
-                    ttt_loss = loss_epoch / num_seen_sequences
-                    _run.log_scalar(metric_name='ttt.loss', value=ttt_loss, step=epoch + batch_idx / num_batches)
-                    valid_loss = validLoss(net, valid_loader, args)
-                    total_error, final_error, norm_l2_dists = testHelper(net, valid_loader, args, args)
-                    total_error = total_error.item() if isinstance(total_error, torch.Tensor) else total_error
-                    final_error = final_error.item() if isinstance(final_error, torch.Tensor) else final_error
-                    _run.log_scalar(metric_name='valid.loss', value=valid_loss, step=epoch+batch_idx/num_batches)
-                    _run.log_scalar(metric_name='valid.total_error', value=total_error, step=epoch+batch_idx/num_batches)
-                    _run.log_scalar(metric_name='valid.final_error', value=final_error, step=epoch+batch_idx/num_batches)
-                    for i, l in enumerate(norm_l2_dists):
-                        error = norm_l2_dists[i].item() if isinstance(norm_l2_dists[i], torch.Tensor) else norm_l2_dists[i]
-                        _run.log_scalar(metric_name=f'valid.norm_l2_dist_{i}', value=error, step=epoch+batch_idx/num_batches)
+            if args.validate:
+                # Validate
+                if batch_idx % 5000 == 0:
+                    if len(valid_loader) > 0:
+                        #TEST
+                        t_dataset, _ = torch.utils.data.random_split(all_datasets, [1000, len(all_datasets)-1000])
+                        # Create the data loader objects
+                        t_loader = DataLoader(t_dataset, batch_size=args.batch_size, shuffle=False, num_workers=4,
+                                                  pin_memory=False,
+                                                  collate_fn=lambda x: x)
+                        t_loss = validLoss(net, t_loader, args)
+                        _run.log_scalar(metric_name='t.loss', value=t_loss, step=epoch + batch_idx / num_batches)
+                        ttt_loss = loss_epoch / num_seen_sequences
+                        _run.log_scalar(metric_name='ttt.loss', value=ttt_loss, step=epoch + batch_idx / num_batches)
+                        valid_loss = validLoss(net, valid_loader, args)
+                        total_error, final_error, norm_l2_dists = testHelper(net, valid_loader, args, args)
+                        total_error = total_error.item() if isinstance(total_error, torch.Tensor) else total_error
+                        final_error = final_error.item() if isinstance(final_error, torch.Tensor) else final_error
+                        _run.log_scalar(metric_name='valid.loss', value=valid_loss, step=epoch+batch_idx/num_batches)
+                        _run.log_scalar(metric_name='valid.total_error', value=total_error, step=epoch+batch_idx/num_batches)
+                        _run.log_scalar(metric_name='valid.final_error', value=final_error, step=epoch+batch_idx/num_batches)
+                        for i, l in enumerate(norm_l2_dists):
+                            error = norm_l2_dists[i].item() if isinstance(norm_l2_dists[i], torch.Tensor) else norm_l2_dists[i]
+                            _run.log_scalar(metric_name=f'valid.norm_l2_dist_{i}', value=error, step=epoch+batch_idx/num_batches)
             '''
 
         loss_epoch /= num_seen_sequences
@@ -268,19 +272,26 @@ def train(args, _run):
         # Sacred metrics plot
         _run.log_scalar(metric_name='train.loss', value=loss_epoch, step=epoch)
 
-        # Validate
-        if len(valid_loader) > 0:
-            valid_loss = validLoss(net, valid_loader, args)
-            print('valid loss = ', valid_loss)
-            total_error, final_error, norm_l2_dists = testHelper(net, valid_loader, args, args)
-            total_error = total_error.item() if isinstance(total_error, torch.Tensor) else total_error
-            final_error = final_error.item() if isinstance(final_error, torch.Tensor) else final_error
-            _run.log_scalar(metric_name='valid.loss', value=valid_loss, step=epoch)
-            _run.log_scalar(metric_name='valid.total_error', value=total_error, step=epoch)
-            _run.log_scalar(metric_name='valid.final_error', value=final_error, step=epoch)
-            for i, l in enumerate(norm_l2_dists):
-                error = norm_l2_dists[i].item() if isinstance(norm_l2_dists[i], torch.Tensor) else norm_l2_dists[i]
-                _run.log_scalar(metric_name=f'valid.norm_l2_dist_{i}', value=error, step=epoch)
+        if args.validate:
+            # Validate
+            if len(valid_loader) > 0:
+                mux, muy, sx, sy, corr = getCoef(outputs)
+                #import pdb; pdb.set_trace()
+                _run.log_scalar(metric_name='valid.mux', value=torch.mean(mux).item(), step=epoch)
+                _run.log_scalar(metric_name='valid.muy', value=torch.mean(muy).item(), step=epoch)
+                _run.log_scalar(metric_name='valid.sx', value=torch.mean(sx).item(), step=epoch)
+                _run.log_scalar(metric_name='valid.sy', value=torch.mean(sy).item(), step=epoch)
+                valid_loss = validLoss(net, valid_loader, args)
+                total_error, final_error, norm_l2_dists = testHelper(net, valid_loader, args, args)
+                total_error = total_error.item() if isinstance(total_error, torch.Tensor) else total_error
+                final_error = final_error.item() if isinstance(final_error, torch.Tensor) else final_error
+                _run.log_scalar(metric_name='valid.loss', value=valid_loss, step=epoch)
+                _run.log_scalar(metric_name='valid.total_error', value=total_error, step=epoch)
+                _run.log_scalar(metric_name='valid.final_error', value=final_error, step=epoch)
+                for i, l in enumerate(norm_l2_dists):
+                    error = norm_l2_dists[i].item() if isinstance(norm_l2_dists[i], torch.Tensor) else norm_l2_dists[i]
+                    _run.log_scalar(metric_name=f'valid.norm_l2_dist_{i}', value=error, step=epoch)
+
 
         # Save the model after each epoch
         print('Saving model')

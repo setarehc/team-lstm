@@ -21,7 +21,7 @@ def cfg():
     batch_size = 1
 
     # Model to be loaded
-    epoch = 99  # 'Epoch of model to be loaded'
+    epoch = 14  # 'Epoch of model to be loaded'
 
     # Number of iteration -> we are trying many times to get lowest test error derived from observed part and prediction of observed
     # part.Currently it is useless because we are using direct copy of observed part and no use of prediction.Test error will be 0.
@@ -190,7 +190,10 @@ def test(sample_args, _run):
     seq_len = sample_args.seq_length
 
     # Determine the test files path
-    test_loader, _ = loadData(sample_args.test_dataset_path, sample_args.orig_seq_len, sample_args.keep_every, 0, sample_args.batch_size, 0)
+    # Debug: manually debug the code
+    #path = 'data/basketball/small_test'
+    path = sample_args.test_dataset_path
+    test_loader, _ = loadData(path, sample_args.orig_seq_len, sample_args.keep_every, 0, sample_args.batch_size, 0, sample_args.persons_to_keep)
 
     num_batches = math.floor(len(test_loader.dataset) / sample_args.batch_size)
 
