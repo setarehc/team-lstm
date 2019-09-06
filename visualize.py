@@ -23,9 +23,9 @@ import pickle
 #from graphviz import Digraph
 from torch.autograd import Variable
 import argparse
-from helper import get_all_file_names, vectorize_seq, angle_between, rotate \
-, remove_file_extention, delete_file, clear_folder, translate, rotate_traj_with_target_ped\
-,get_mean_error, get_final_error, get_method_name
+from helper import getAllFileNames, vectorizeSeq, getAngle, rotate \
+, removeFileExtention, deleteFile, clearFolder, translate, rotateTrajWithTargetPed\
+,getMeanError, getFinalError, getMethodName
 
 def save_video(sequence_path, video_path, video_name ,frame):
     # save plots as video
@@ -481,7 +481,7 @@ def create_plot_animation(plt, trajs, shuffled_ped_ids, target_id, inv_lookup ,s
 
 def vectorize_traj(traj, nodesPresent, look_up):
     #wrap up for vectorizing traj
-    traj, _ = vectorize_seq(Variable(torch.FloatTensor(traj)), nodesPresent, look_up)
+    traj, _ = vectorizeSeq(Variable(torch.FloatTensor(traj)), nodesPresent, look_up)
     traj = np.array([seq.data.numpy() for seq in traj])
     return traj
 
@@ -691,7 +691,7 @@ def main():
       f_prefix = 'drive/semester_project/social_lstm_final'
 
     model_name = "LSTM"
-    method_name = get_method_name(args.method)
+    method_name = getMethodName(args.method)
     if args.gru:
         model_name = "GRU"
 
@@ -706,14 +706,14 @@ def main():
     save_plot_directory = os.path.join(f_prefix, 'plot',method_name, model_name,'plots/')
     plot_directory = os.path.join(f_prefix, 'plot', method_name, model_name, plot_file_directory)
     video_directory = os.path.join(f_prefix, 'plot',method_name, model_name,'videos/')
-    plot_file_name = get_all_file_names(plot_directory)
+    plot_file_name = getAllFileNames(plot_directory)
     num_of_data = np.clip(args.num_of_data, 0, len(plot_file_name))
     plot_file_name = random.sample(plot_file_name, num_of_data)
 
     
     for file_index in range(len(plot_file_name)):
         file_name = plot_file_name[file_index]
-        folder_name = remove_file_extention(file_name)
+        folder_name = removeFileExtention(file_name)
         print("Now processing: ", file_name)
 
         file_path = os.path.join(plot_directory, file_name)
@@ -721,8 +721,8 @@ def main():
         figure_save_directory = os.path.join(save_plot_directory, folder_name)
 
         # remove existed plots
-        clear_folder(video_save_directory)
-        clear_folder(figure_save_directory)
+        clearFolder(video_save_directory)
+        clearFolder(figure_save_directory)
 
 
         if not os.path.exists(video_save_directory):

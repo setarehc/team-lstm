@@ -10,7 +10,7 @@ from torch.autograd import Variable
 
 import numpy as np
 from utils import DataLoader
-from helper import get_mean_error, get_final_error
+from helper import getMeanError, getFinalError
 
 from helper import *
 from grid import getSequenceGridMask
@@ -58,7 +58,7 @@ def main():
       f_prefix = 'drive/semester_project/social_lstm_final'
     
 
-    method_name = get_method_name(sample_args.method)
+    method_name = getMethodName(sample_args.method)
     model_name = "LSTM"
     save_tar_name = method_name+"_lstm_model_"
     if sample_args.gru:
@@ -80,7 +80,7 @@ def main():
 
     origin = (0,0)
     reference_point = (0,1)
-    net = get_model(sample_args.method, saved_args, True)
+    net = getModel(sample_args.method, saved_args, True)
     if sample_args.use_cuda:        
         net = net.cuda()
 
@@ -95,7 +95,7 @@ def main():
 
     # Create the DataLoader object
     dataloader = DataLoader(f_prefix, 1, sample_args.seq_length, num_of_validation = sample_args.num_validation, forcePreProcess = True, infer = True)
-    create_directories(plot_directory, [plot_validation_file_directory])
+    createDirectories(plot_directory, [plot_validation_file_directory])
     dataloader.reset_batch_pointer()
 
     print('****************Validation dataset batch processing******************')
@@ -161,7 +161,7 @@ def main():
                 grid_seq = getSequenceGridMask(x_seq, dataset_data, PedsList_seq, saved_args.neighborhood_size, saved_args.grid_size, saved_args.use_cuda)
 
             #vectorize datapoints
-            x_seq, first_values_dict = vectorize_seq(x_seq, PedsList_seq, lookup_seq)
+            x_seq, first_values_dict = vectorizeSeq(x_seq, PedsList_seq, lookup_seq)
 
             # <---------------- Experimental block (may need update in methods)----------------------->
             # x_seq = translate(x_seq, PedsList_seq, lookup_seq ,target_id_values)
@@ -176,7 +176,7 @@ def main():
                 x_seq = x_seq.cuda()
 
             if sample_args.method == 3: #vanilla lstm
-                ret_x_seq, loss = sample_validation_data_vanilla(x_seq, PedsList_seq, sample_args, net, lookup_seq, numPedsList_seq, dataloader)
+                ret_x_seq, loss = sampleValidationDataVanilla(x_seq, PedsList_seq, sample_args, net, lookup_seq, numPedsList_seq, dataloader)
 
             else:
                 ret_x_seq, loss = sample_validation_data(x_seq, PedsList_seq, grid_seq, sample_args, net, lookup_seq, numPedsList_seq, dataloader)
@@ -186,10 +186,10 @@ def main():
             # ret_x_seq = rotate_traj_with_target_ped(ret_x_seq, -angle, PedsList_seq, lookup_seq)
             # ret_x_seq = translate(ret_x_seq, PedsList_seq, lookup_seq ,-target_id_values)
             #revert the points back to original space
-            ret_x_seq = revert_seq(ret_x_seq, PedsList_seq, lookup_seq, first_values_dict)
+            ret_x_seq = revertSeq(ret_x_seq, PedsList_seq, lookup_seq, first_values_dict)
             
-            err = get_mean_error(ret_x_seq.data, orig_x_seq.data, PedsList_seq, PedsList_seq, sample_args.use_cuda, lookup_seq)
-            f_err = get_final_error(ret_x_seq.data, orig_x_seq.data, PedsList_seq, PedsList_seq, lookup_seq)
+            err = getMeanError(ret_x_seq.data, orig_x_seq.data, PedsList_seq, PedsList_seq, sample_args.use_cuda, lookup_seq)
+            f_err = getFinalError(ret_x_seq.data, orig_x_seq.data, PedsList_seq, PedsList_seq, lookup_seq)
            
 
             loss_batch += loss

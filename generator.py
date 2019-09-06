@@ -11,7 +11,7 @@ import subprocess
 import random
 
 from utils import DataLoader, WriteOnceDict
-from helper import get_all_file_names, delete_file, create_directories, remove_file_extention, add_file_extention, rotate, vectorize_seq
+from helper import getAllFileNames, deleteFile, createDirectories, removeFileExtention, addFileExtention, rotate, vectorizeSeq
 
 
 class data_augmentator():
@@ -95,13 +95,13 @@ class data_augmentator():
 
 		# write modified datapoints to txt files
 		whole_dataset.append(dataset_instances)
-		create_directories(os.path.join(self.f_prefix, self.base_validation_path), self.dataloader.get_all_directory_namelist())
+		createDirectories(os.path.join(self.f_prefix, self.base_validation_path), self.dataloader.get_all_directory_namelist())
 		self.write_modified_datasets(whole_dataset)
 
 
 	def handle_seq(self, x_seq, lookup_seq, PedsList_seq, angle):
 		# add noise and rotate a trajectory
-		vectorized_x_seq, first_values_dict = vectorize_seq(x_seq, PedsList_seq, lookup_seq)
+		vectorized_x_seq, first_values_dict = vectorizeSeq(x_seq, PedsList_seq, lookup_seq)
 		modified_x_seq = vectorized_x_seq.clone()
 		mean = torch.FloatTensor([self.noise_mean, self.noise_mean])
 		stddev =torch.FloatTensor([self.noise_std, self.noise_std])
@@ -157,9 +157,9 @@ class data_augmentator():
 		cleared_direcories = []
 		for key, value in dict.items():
 			path = os.path.join(self.f_prefix, base_path, key[0])
-			ext_removed_file_name = remove_file_extention(key[1])
+			ext_removed_file_name = removeFileExtention(key[1])
 			file_name = ext_removed_file_name + "_" + str(key[2])
-			file_name = add_file_extention(file_name, 'txt')
+			file_name = addFileExtention(file_name, 'txt')
 			self.dataloader.write_dataset(value, file_name, path)
 	
 	def clear_directories(self, base_path, delete_all = False):
@@ -169,12 +169,12 @@ class data_augmentator():
 		base_path = os.path.join(self.f_prefix, base_path)
 		for dir_ in dir_names:
 			dir_path = os.path.join(base_path, dir_)
-			file_names = get_all_file_names(dir_path)
+			file_names = getAllFileNames(dir_path)
 			if delete_all:
 				base_file_names = []
 			else:
 				base_file_names = self.dataloader.get_base_file_name(dir_)
-			[delete_file(dir_path, [file_name]) for file_name in file_names if file_name not in base_file_names]
+			[deleteFile(dir_path, [file_name]) for file_name in file_names if file_name not in base_file_names]
 
 
 

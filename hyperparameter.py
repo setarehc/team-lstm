@@ -9,7 +9,7 @@ from torch.autograd import Variable
 
 import numpy as np
 from utils import DataLoader
-from helper import get_mean_error, get_final_error
+from helper import getMeanError, getFinalError
 
 from helper import *
 from grid import getSequenceGridMask
@@ -124,7 +124,7 @@ def main():
       f_prefix = 'drive/semester_project/social_lstm_final'
     
 
-    method_name = get_method_name(args.method)
+    method_name = getMethodName(args.method)
     model_name = "LSTM"
     save_tar_name = method_name+"_lstm_model_"
     if args.gru:
@@ -143,7 +143,7 @@ def main():
     
    
     # Create the DataLoader object
-    create_directories(param_log, [param_log_file])
+    createDirectories(param_log, [param_log_file])
     log_file = open(os.path.join(param_log, param_log_file, 'log.txt'), 'w+')
     
     dataloader_t = DataLoader(f_prefix, args.batch_size, args.seq_length, num_of_validation = args.num_validation, forcePreProcess = True, infer = True)
@@ -170,7 +170,7 @@ def main():
 
         
 
-        net = get_model(args.method, args)
+        net = getModel(args.method, args)
         
         if args.use_cuda:        
             net = net.cuda()
@@ -223,7 +223,7 @@ def main():
                     elif  args.method == 1: #social lstm   
                         grid_seq = getSequenceGridMask(x_seq, dataset_data, PedsList_seq, args.neighborhood_size, args.grid_size, args.use_cuda)
                     # vectorize trajectories in sequence
-                    x_seq, _ = vectorize_seq(x_seq, PedsList_seq, lookup_seq)
+                    x_seq, _ = vectorizeSeq(x_seq, PedsList_seq, lookup_seq)
 
 
                     if args.use_cuda:                    
@@ -284,7 +284,7 @@ def main():
 
 
 
-        net = get_model(args.method, args, True)
+        net = getModel(args.method, args, True)
         
         if args.use_cuda:        
             net = net.cuda()
@@ -351,7 +351,7 @@ def main():
                 elif  args.method == 1: #social lstm   
                     grid_seq = getSequenceGridMask(x_seq, dataset_data, PedsList_seq, args.neighborhood_size, args.grid_size, args.use_cuda)
                 # vectorize trajectories in sequence
-                x_seq, first_values_dict = vectorize_seq(x_seq, PedsList_seq, lookup_seq)
+                x_seq, first_values_dict = vectorizeSeq(x_seq, PedsList_seq, lookup_seq)
 
 
                 # <--------------Experimental block --------------->
@@ -365,16 +365,16 @@ def main():
                     x_seq = x_seq.cuda()
 
                 if args.method == 3: #vanilla lstm
-                    ret_x_seq, loss = sample_validation_data_vanilla(x_seq, PedsList_seq, args, net, lookup_seq, numPedsList_seq, dataloader_v)
+                    ret_x_seq, loss = sampleValidationDataVanilla(x_seq, PedsList_seq, args, net, lookup_seq, numPedsList_seq, dataloader_v)
 
                 else:
                     ret_x_seq, loss = sample_validation_data(x_seq, PedsList_seq, grid_seq, args, net, lookup_seq, numPedsList_seq, dataloader_v)
                 
                 #revert the points back to original space
-                ret_x_seq = revert_seq(ret_x_seq, PedsList_seq, lookup_seq, first_values_dict)
+                ret_x_seq = revertSeq(ret_x_seq, PedsList_seq, lookup_seq, first_values_dict)
 
-                err = get_mean_error(ret_x_seq.data, orig_x_seq.data, PedsList_seq, PedsList_seq, args.use_cuda, lookup_seq)
-                f_err = get_final_error(ret_x_seq.data, orig_x_seq.data, PedsList_seq, PedsList_seq, lookup_seq)
+                err = getMeanError(ret_x_seq.data, orig_x_seq.data, PedsList_seq, PedsList_seq, args.use_cuda, lookup_seq)
+                f_err = getFinalError(ret_x_seq.data, orig_x_seq.data, PedsList_seq, PedsList_seq, lookup_seq)
                 
                 # ret_x_seq = rotate_traj_with_target_ped(ret_x_seq, -angle, PedsList_seq, lookup_seq)
                 # ret_x_seq = revert_seq(ret_x_seq, PedsList_seq, lookup_seq, target_id_values, first_values_dict)

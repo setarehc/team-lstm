@@ -24,7 +24,7 @@ class WriteOnceDict(dict):
             super(WriteOnceDict, self).__setitem__(key, value)
 
 #(1 = social lstm, 2 = obstacle lstm, 3 = vanilla lstm)
-def get_method_name(index):
+def getMethodName(index):
     # return method name given index
     return {
         1 : 'SOCIALLSTM',
@@ -32,7 +32,7 @@ def get_method_name(index):
         3 : 'VANILLALSTM'
     }.get(index, 'SOCIALLSTM')
 
-def get_model(index, arguments, infer = False):
+def getModel(index, arguments, infer = False):
     # return a model given index and arguments
     if index == 1:
         return SocialModel(arguments, infer)
@@ -57,7 +57,7 @@ def getCoef(outputs):
     return mux, muy, sx, sy, corr
 
 
-def sample_gaussian_2d(mux, muy, sx, sy, corr, nodesPresent, look_up):
+def sampleGaussian2d(mux, muy, sx, sy, corr, nodesPresent, look_up):
     '''
     Parameters
     ==========
@@ -95,7 +95,7 @@ def sample_gaussian_2d(mux, muy, sx, sy, corr, nodesPresent, look_up):
 
     return next_x, next_y
 
-def get_mean_error(ret_nodes, nodes, assumedNodesPresent, trueNodesPresent, using_cuda, look_up):
+def getMeanError(ret_nodes, nodes, assumedNodesPresent, trueNodesPresent, using_cuda, look_up):
     '''
     Parameters
     ==========
@@ -144,7 +144,7 @@ def get_mean_error(ret_nodes, nodes, assumedNodesPresent, trueNodesPresent, usin
     return torch.mean(error)
 
 
-def get_final_error(ret_nodes, nodes, assumedNodesPresent, trueNodesPresent, look_up):
+def getFinalError(ret_nodes, nodes, assumedNodesPresent, trueNodesPresent, look_up):
     '''
     Parameters
     ==========
@@ -308,16 +308,16 @@ def Gaussian2DLikelihood(outputs, targets, nodesPresent, look_up):
 
 ##################### Data related methods ######################
 
-def remove_file_extention(file_name):
+def removeFileExtention(file_name):
     # remove file extension (.txt) given filename
     return file_name.split('.')[0]
 
-def add_file_extention(file_name, extention):
+def addFileExtention(file_name, extention):
     # add file extension (.txt) given filename
 
     return file_name + '.' + extention
 
-def clear_folder(path):
+def clearFolder(path):
     # remove all files in the folder
     if os.path.exists(path):
         shutil.rmtree(path)
@@ -325,7 +325,7 @@ def clear_folder(path):
     else:
         print("No such path: ",path)
 
-def delete_file(path, file_name_list):
+def deleteFile(path, file_name_list):
     # delete given file list
     for file in file_name_list:
         file_path = os.path.join(path, file)
@@ -338,7 +338,7 @@ def delete_file(path, file_name_list):
         except OSError as e:  ## if failed, report it back to the user ##
             print ("Error: %s - %s." % (e.filename,e.strerror))
 
-def get_all_file_names(path):
+def getAllFileNames(path):
     # return all file names given directory
     files = []
     for (dirpath, dirnames, filenames) in walk(path):
@@ -346,7 +346,7 @@ def get_all_file_names(path):
         break
     return files
 
-def create_directories(base_folder_path, folder_list):
+def createDirectories(base_folder_path, folder_list):
     # create folders using a folder list and path
     for folder_name in folder_list:
         directory = os.path.join(base_folder_path, folder_name)
@@ -354,7 +354,7 @@ def create_directories(base_folder_path, folder_list):
             os.makedirs(directory)
 
 
-def unique_list(l):
+def uniqueList(l):
   # get unique elements from list
   x = []
   for a in l:
@@ -363,14 +363,14 @@ def unique_list(l):
   return x
 
 
-def angle_between(p1, p2):
+def getAngle(p1, p2):
     # return angle between two points
     ang1 = np.arctan2(*p1[::-1])
     ang2 = np.arctan2(*p2[::-1])
     return ((ang1 - ang2) % (2 * np.pi))
 
 
-def vectorize_seq(x_seq, PedsList_seq, lookup_seq):
+def vectorizeSeq(x_seq, PedsList_seq, lookup_seq):
     # substract first frame value to all frames for a ped. Therefore, convert absolute pos. to relative pos.
     first_values_dict = WriteOnceDict()
     vectorized_x_seq = x_seq.clone()
@@ -392,7 +392,7 @@ def translate(x_seq, PedsList_seq, lookup_seq, value):
     return vectorized_x_seq
 
 
-def revert_seq(x_seq, PedsList_seq, lookup_seq, first_values_dict):
+def revertSeq(x_seq, PedsList_seq, lookup_seq, first_values_dict):
     # convert velocity array to absolute position array
     absolute_x_seq = x_seq.clone()
     for ind, frame in enumerate(x_seq):
@@ -416,7 +416,7 @@ def rotate(origin, point, angle):
         #return torch.cat([qx, qy])
         return [qx, qy]
 
-def time_lr_scheduler(optimizer, epoch, lr_decay=0.5, lr_decay_epoch=10):
+def timeLrScheduler(optimizer, epoch, lr_decay=0.5, lr_decay_epoch=10):
     """Decay learning rate by a factor of lr_decay every lr_decay_epoch epochs"""
     if epoch % lr_decay_epoch:
         return optimizer
@@ -426,6 +426,7 @@ def time_lr_scheduler(optimizer, epoch, lr_decay=0.5, lr_decay_epoch=10):
     for param_group in optimizer.param_groups:
         param_group['lr'] *= (1. / (1. + lr_decay * epoch))
     return optimizer
+
 
 def sample_validation_data(x_seq, Pedlist, grid, args, net, look_up, num_pedlist, dataloader):
     '''
@@ -437,8 +438,6 @@ def sample_validation_data(x_seq, Pedlist, grid, args, net, look_up, num_pedlist
     net: The model
     num_pedlist : number of peds in each frame
     look_up : lookup table for determining which ped is in which array index
-
-
     '''
     # Number of peds in the sequence
     numx_seq = len(look_up)
@@ -476,7 +475,7 @@ def sample_validation_data(x_seq, Pedlist, grid, args, net, look_up, num_pedlist
             # Extract the mean, std and corr of the bivariate Gaussian
             mux, muy, sx, sy, corr = getCoef(out_)
             # Sample from the bivariate Gaussian
-            next_x, next_y = sample_gaussian_2d(mux.data, muy.data, sx.data, sy.data, corr.data, Pedlist[tstep], look_up)
+            next_x, next_y = sampleGaussian2d(mux.data, muy.data, sx.data, sy.data, corr.data, Pedlist[tstep], look_up)
             ret_x_seq[tstep + 1, :, 0] = next_x
             ret_x_seq[tstep + 1, :, 1] = next_y
             loss = Gaussian2DLikelihood(out_[0].view(1, out_.size()[1], out_.size()[2]), x_seq[tstep].view(1, numx_seq, 2), [Pedlist[tstep]], look_up)
@@ -486,7 +485,7 @@ def sample_validation_data(x_seq, Pedlist, grid, args, net, look_up, num_pedlist
     return ret_x_seq, total_loss / args.seq_length
 
 
-def sample_validation_data_vanilla(x_seq, Pedlist, args, net, look_up, num_pedlist, dataloader):
+def sampleValidationDataVanilla(x_seq, Pedlist, args, net, look_up, num_pedlist, dataloader):
     '''
     The validation sample function for vanilla method
     params:
@@ -533,7 +532,7 @@ def sample_validation_data_vanilla(x_seq, Pedlist, args, net, look_up, num_pedli
         # Extract the mean, std and corr of the bivariate Gaussian
         mux, muy, sx, sy, corr = getCoef(out_)
         # Sample from the bivariate Gaussian
-        next_x, next_y = sample_gaussian_2d(mux.data, muy.data, sx.data, sy.data, corr.data, Pedlist[tstep], look_up)
+        next_x, next_y = sampleGaussian2d(mux.data, muy.data, sx.data, sy.data, corr.data, Pedlist[tstep], look_up)
         ret_x_seq[tstep + 1, :, 0] = next_x
         ret_x_seq[tstep + 1, :, 1] = next_y
         loss = Gaussian2DLikelihood(out_[0].view(1, out_.size()[1], out_.size()[2]), x_seq[tstep].view(1, numx_seq, 2), [Pedlist[tstep]], look_up)
@@ -543,7 +542,7 @@ def sample_validation_data_vanilla(x_seq, Pedlist, args, net, look_up, num_pedli
     return ret_x_seq, total_loss / args.seq_length
 
 
-def rotate_traj_with_target_ped(x_seq, angle, PedsList_seq, lookup_seq):
+def rotateTrajWithTargetPed(x_seq, angle, PedsList_seq, lookup_seq):
     # rotate sequence given angle
     origin = (0, 0)
     vectorized_x_seq = x_seq.clone()
@@ -557,7 +556,7 @@ def rotate_traj_with_target_ped(x_seq, angle, PedsList_seq, lookup_seq):
 
 
 # *Kevin Murphy*
-def get_normalized_l2_distance(ret_nodes, nodes, assumedNodesPresent, trueNodesPresent, use_cuda, look_up):
+def getNormalizedL2Distance(ret_nodes, nodes, assumedNodesPresent, trueNodesPresent, use_cuda, look_up):
     '''
     Parameters
     ==========
@@ -618,7 +617,7 @@ def get_normalized_l2_distance(ret_nodes, nodes, assumedNodesPresent, trueNodesP
 
     return error
 
-def get_mean_shift(tensor):
+def getMeanShift(tensor):
     '''
     Returns mean shifted version of input tensor
     :return: tensor - mean(tensor)
@@ -626,13 +625,13 @@ def get_mean_shift(tensor):
     return tensor - torch.mean(tensor)
 
 
-def get_squared_norm(tensor, p=2):
+def getSquaredNorm(tensor, p=2):
     '''
     Returns squared norm of input tensor
     '''
     return torch.norm(tensor, p=p) ** 2
 
-def get_size(tensor):
+def getSize(tensor):
     '''
     Returns size of input tensor
     :return: size(tensor)
@@ -669,7 +668,7 @@ def loadData(dataset_path, seq_length, keep_every, valid_percentage, batch_size,
     return train_loader, valid_loader
 
 
-def get_folder_name(folder_path, dataset):
-    if dataset == 'basketball' or dataset == 'basketball_small':
+def getFolderName(folder_path, dataset):
+    if dataset in ['basketball', 'basketball_small', 'basketball_total']:
         return folder_path.split('/')[-3]
     return folder_path.split('/')[-1]

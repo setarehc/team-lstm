@@ -72,29 +72,29 @@ def testHelper(net, test_loader, sample_args, saved_args):
         start = time.time()
 
         # Get the sequence
-        x_seq, numPedsList_seq, PedsList_seq, folder_path = batch[
+        x_seq, num_peds_list_seq, peds_list_seq, folder_path = batch[
             0]  # because source code assumes batch_size=0 and doesn't iterate over sequences of a batch
 
         # Get processing file name and then get dimensions of file
-        folder_name = get_folder_name(folder_path, sample_args.dataset)
+        folder_name = getFolderName(folder_path, sample_args.dataset)
         dataset_data = dataset_dimensions[folder_name]
 
         # Dense vector creation
-        x_seq, lookup_seq = convert_to_tensor(x_seq, PedsList_seq)
+        x_seq, lookup_seq = convertToTensor(x_seq, peds_list_seq)
 
         # Will be used for error calculation
         orig_x_seq = x_seq.clone()
 
         # Grid mask calculation
         if sample_args.method == 2:  # obstacle lstm
-            grid_seq = getSequenceGridMask(x_seq, dataset_data, PedsList_seq, saved_args.neighborhood_size,
+            grid_seq = getSequenceGridMask(x_seq, dataset_data, peds_list_seq, saved_args.neighborhood_size,
                                            saved_args.grid_size, saved_args.use_cuda, True)
         elif sample_args.method == 1:  # social lstm
-            grid_seq = getSequenceGridMask(x_seq, dataset_data, PedsList_seq, saved_args.neighborhood_size,
+            grid_seq = getSequenceGridMask(x_seq, dataset_data, peds_list_seq, saved_args.neighborhood_size,
                                            saved_args.grid_size, saved_args.use_cuda)
 
         # Replace relative positions with true positions in x_seq
-        x_seq, first_values_dict = vectorize_seq(x_seq, PedsList_seq, lookup_seq)
+        x_seq, first_values_dict = vectorizeSeq(x_seq, peds_list_seq, lookup_seq)
 
         # *CUDA*
         if sample_args.use_cuda:
@@ -105,43 +105,43 @@ def testHelper(net, test_loader, sample_args, saved_args):
         # The sample function
         if sample_args.method == 3:  # vanilla lstm
             # Extract the observed part of the trajectories
-            obs_traj, obs_PedsList_seq = x_seq[:sample_args.obs_length], PedsList_seq[:sample_args.obs_length]
-            ret_x_seq = sample(obs_traj, obs_PedsList_seq, sample_args, net, x_seq, PedsList_seq, saved_args,
-                               dataset_data, test_loader, lookup_seq, numPedsList_seq, sample_args.gru)
+            obs_traj, obs_PedsList_seq = x_seq[:sample_args.obs_length], peds_list_seq[:sample_args.obs_length]
+            ret_x_seq = sample(obs_traj, obs_PedsList_seq, sample_args, net, x_seq, peds_list_seq, saved_args,
+                               dataset_data, test_loader, lookup_seq, num_peds_list_seq, sample_args.gru)
 
         else:
             # Extract the observed part of the trajectories
-            obs_traj, obs_PedsList_seq, obs_grid = x_seq[:sample_args.obs_length], PedsList_seq[
+            obs_traj, obs_PedsList_seq, obs_grid = x_seq[:sample_args.obs_length], peds_list_seq[
                                                                                    :sample_args.obs_length], grid_seq[
                                                                                                              :sample_args.obs_length]
-            ret_x_seq = sample(obs_traj, obs_PedsList_seq, sample_args, net, x_seq, PedsList_seq, saved_args,
-                               dataset_data, test_loader, lookup_seq, numPedsList_seq, sample_args.gru, obs_grid)
+            ret_x_seq = sample(obs_traj, obs_PedsList_seq, sample_args, net, x_seq, peds_list_seq, saved_args,
+                               dataset_data, test_loader, lookup_seq, num_peds_list_seq, sample_args.gru, obs_grid)
 
         # revert the points back to original space
-        ret_x_seq = revert_seq(ret_x_seq, PedsList_seq, lookup_seq, first_values_dict)
+        ret_x_seq = revertSeq(ret_x_seq, peds_list_seq, lookup_seq, first_values_dict)
 
         # *CUDA*
         if sample_args.use_cuda:
             ret_x_seq = ret_x_seq.cuda()
 
         # *ORIGINAL TEST*
-        total_error += get_mean_error(ret_x_seq[sample_args.obs_length:].data,
+        total_error += getMeanError(ret_x_seq[sample_args.obs_length:].data,
                                       orig_x_seq[sample_args.obs_length:].data,
-                                      PedsList_seq[sample_args.obs_length:],
-                                      PedsList_seq[sample_args.obs_length:],
-                                      sample_args.use_cuda, lookup_seq)
+                                      peds_list_seq[sample_args.obs_length:],
+                                      peds_list_seq[sample_args.obs_length:],
+                                    sample_args.use_cuda, lookup_seq)
 
-        final_error += get_final_error(ret_x_seq[sample_args.obs_length:].data,
+        final_error += getFinalError(ret_x_seq[sample_args.obs_length:].data,
                                        orig_x_seq[sample_args.obs_length:].data,
-                                       PedsList_seq[sample_args.obs_length:],
-                                       PedsList_seq[sample_args.obs_length:], lookup_seq)
+                                       peds_list_seq[sample_args.obs_length:],
+                                       peds_list_seq[sample_args.obs_length:], lookup_seq)
 
         # *Kevin Murphy*
-        norm_l2_dists += get_normalized_l2_distance(ret_x_seq[:sample_args.obs_length].data,
+        norm_l2_dists += getNormalizedL2Distance(ret_x_seq[:sample_args.obs_length].data,
                                                     orig_x_seq[:sample_args.obs_length].data,
-                                                    PedsList_seq[:sample_args.obs_length],
-                                                    PedsList_seq[:sample_args.obs_length],
-                                                    sample_args.use_cuda, lookup_seq)
+                                                    peds_list_seq[:sample_args.obs_length],
+                                                    peds_list_seq[:sample_args.obs_length],
+                                                 sample_args.use_cuda, lookup_seq)
 
         end = time.time()
 
@@ -164,7 +164,7 @@ def test(sample_args, _run):
       #print("Directory creation script is running...")
       subprocess.call([f_prefix+'/make_directories.sh'])
 
-    method_name = get_method_name(sample_args.method)
+    method_name = getMethodName(sample_args.method)
     model_name = "LSTM"
     save_tar_name = method_name+"_lstm_model_"
     if sample_args.gru:
@@ -208,7 +208,7 @@ def test(sample_args, _run):
 
     for iteration in range(sample_args.iteration):
         # Initialize net
-        net = get_model(sample_args.method, saved_args, True)
+        net = getModel(sample_args.method, saved_args, True)
 
         if sample_args.use_cuda:
             net = net.cuda()
@@ -220,6 +220,7 @@ def test(sample_args, _run):
             checkpoint = torch.load(checkpoint_path)
             model_epoch = checkpoint['epoch']
             net.load_state_dict(checkpoint['state_dict'])
+            import pdb; pdb.set_trace()
             print('Loaded checkpoint at epoch', model_epoch)
         else:
             raise ValueError('Incorrect checkpoint: file does not exist')
@@ -296,8 +297,8 @@ def sample(x_seq, Pedlist, args, net, true_x_seq, true_Pedlist, saved_args, dime
             # Extract the mean, std and corr of the bivariate Gaussian
             mux, muy, sx, sy, corr = getCoef(out_obs)
             # Sample from the bivariate Gaussian
-            next_x, next_y = sample_gaussian_2d(mux.data, muy.data, sx.data, sy.data, corr.data, true_Pedlist[tstep],
-                                                look_up)
+            next_x, next_y = sampleGaussian2d(mux.data, muy.data, sx.data, sy.data, corr.data, true_Pedlist[tstep],
+                                              look_up)
             ret_x_seq[tstep + 1, :, 0] = next_x
             ret_x_seq[tstep + 1, :, 1] = next_y
 
@@ -332,8 +333,8 @@ def sample(x_seq, Pedlist, args, net, true_x_seq, true_Pedlist, saved_args, dime
             # Extract the mean, std and corr of the bivariate Gaussian
             mux, muy, sx, sy, corr = getCoef(outputs)
             # Sample from the bivariate Gaussian
-            next_x, next_y = sample_gaussian_2d(mux.data, muy.data, sx.data, sy.data, corr.data, true_Pedlist[tstep],
-                                                look_up)
+            next_x, next_y = sampleGaussian2d(mux.data, muy.data, sx.data, sy.data, corr.data, true_Pedlist[tstep],
+                                              look_up)
 
             # Store the predicted position
             ret_x_seq[tstep + 1, :, 0] = next_x
@@ -369,7 +370,7 @@ def sample(x_seq, Pedlist, args, net, true_x_seq, true_Pedlist, saved_args, dime
         return ret_x_seq
 
 
-def submission_preprocess(dataloader, ret_x_seq, pred_length, obs_length, target_id):
+def submissionPreprocess(dataloader, ret_x_seq, pred_length, obs_length, target_id):
     seq_lenght = pred_length + obs_length
 
     # begin and end index of obs. frames in this seq.

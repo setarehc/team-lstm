@@ -11,7 +11,7 @@ dataset_dimensions = {'hotel.txt': [720, 576], 'eth.txt': [720, 576],
                                    'mot': [768, 576], 'overfit': [768, 576],
                                    'basketball': [400, 360], 'dataloader': [768, 578]}
 
-def convert_to_tensor(seq_data, persons_list):
+def convertToTensor(seq_data, persons_list):
     """
     Function that converts seq_data into a tensor of size (seq_len, max_num_persons, 2) and a look-up table
     max_num_persons = maximum number of persons present in all of the frames of the sequence
@@ -66,11 +66,12 @@ class TrajectoryDataset(Dataset):
         # Sort dataframe based on ped_id and then by frame_num
         df = df.sort_values(by=['person_id', 'frame_num'])
 
-        # Keep only the self.persons_to_keep persons in the dataset
+        # *Kevin Murphy's*
+        # Keep only the self.persons_to_keep persons in the dataset (for total_train and total_test in basketball dataset)
         if self.persons_to_keep is not None:
             gdf = df.groupby(['person_id'])
-            for ped_id, group in gdf:
-                if self.persons_to_keep[ped_id % 11] == 0:
+            for person_id, group in gdf:
+                if self.persons_to_keep[person_id % 11] == 0: # TODO have a variable instead of 11
                     df = df.drop(group.index)
 
         # Normalize x and y values for basketball dataset

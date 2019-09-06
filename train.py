@@ -12,6 +12,7 @@ from test import testHelper
 
 ex = sacred.Experiment('train', ingredients=[utils.common_ingredient, utils.dataset_ingredient])
 ex.observers.append(MongoObserver.create(url='localhost:27017', db_name='MY_DB'))
+ex.captured_out_filter = lambda text: 'Output capturing turned off.'
 
 @ex.config
 def cfg():
@@ -161,21 +162,21 @@ def train(args, _run):
             # For each sequence
             for sequence in range(args.batch_size):
                 # Get the data corresponding to the current sequence
-                x_seq, numPedsList_seq, PedsList_seq, folder_path = batch[sequence]
+                x_seq, num_peds_list_seq, peds_list_seq, folder_path = batch[sequence]
 
                 # Dense vector (tensor) creation
-                x_seq, lookup_seq = convert_to_tensor(x_seq, PedsList_seq)
+                x_seq, lookup_seq = convertToTensor(x_seq, peds_list_seq)
 
                 # Get processing file name and then get dimensions of file
-                folder_name = get_folder_name(folder_path, args.dataset)
+                folder_name = getFolderName(folder_path, args.dataset)
                 dataset_data = dataset_dimensions[folder_name]
 
                 # Grid mask calculation and storage depending on grid parameter
-                grid_seq = getSequenceGridMask(x_seq, dataset_data, PedsList_seq, args.neighborhood_size,
+                grid_seq = getSequenceGridMask(x_seq, dataset_data, peds_list_seq, args.neighborhood_size,
                                                args.grid_size, args.use_cuda)
 
                 # Replace relative positions with true positions in x_seq
-                x_seq, _ = vectorize_seq(x_seq, PedsList_seq, lookup_seq)
+                x_seq, _ = vectorizeSeq(x_seq, peds_list_seq, lookup_seq)
 
                 if args.use_cuda:
                     x_seq = x_seq.cuda()
@@ -196,7 +197,7 @@ def train(args, _run):
                 optimizer.zero_grad()
 
                 # Forward prop
-                outputs, _, _ = net(x_seq, grid_seq, hidden_states, cell_states, PedsList_seq, numPedsList_seq,
+                outputs, _, _ = net(x_seq, grid_seq, hidden_states, cell_states, peds_list_seq, num_peds_list_seq,
                                     train_loader, lookup_seq)
 
                 # Increment number of seen sequences
@@ -206,7 +207,7 @@ def train(args, _run):
 
 
                 # Compute loss
-                loss = Gaussian2DLikelihood(outputs, x_seq, PedsList_seq, lookup_seq)
+                loss = Gaussian2DLikelihood(outputs, x_seq, peds_list_seq, lookup_seq)
                 loss_batch += loss.item()
 
                 # Free the memory
@@ -326,21 +327,21 @@ def validLoss(net, valid_loader, args):
             # For each sequence
             for sequence in range(args.batch_size):
                 # Get the data corresponding to the current sequence
-                x_seq, numPedsList_seq, PedsList_seq, folder_path = batch[sequence]
+                x_seq, num_peds_list_seq, peds_list_seq, folder_path = batch[sequence]
 
                 # Dense vector (tensor) creation
-                x_seq, lookup_seq = convert_to_tensor(x_seq, PedsList_seq)
+                x_seq, lookup_seq = convertToTensor(x_seq, peds_list_seq)
 
                 # Get processing file name and then get dimensions of file
-                folder_name = get_folder_name(folder_path, args.dataset)
+                folder_name = getFolderName(folder_path, args.dataset)
                 dataset_data = dataset_dimensions[folder_name]
 
                 # Grid mask calculation and storage depending on grid parameter
-                grid_seq = getSequenceGridMask(x_seq, dataset_data, PedsList_seq, args.neighborhood_size,
+                grid_seq = getSequenceGridMask(x_seq, dataset_data, peds_list_seq, args.neighborhood_size,
                                                args.grid_size, args.use_cuda)
 
                 # Vectorize trajectories in sequence
-                x_seq, _ = vectorize_seq(x_seq, PedsList_seq, lookup_seq)
+                x_seq, _ = vectorizeSeq(x_seq, peds_list_seq, lookup_seq)
 
                 if args.use_cuda:
                     x_seq = x_seq.cuda()
@@ -357,14 +358,14 @@ def validLoss(net, valid_loader, args):
                     cell_states = cell_states.cuda()
 
                 # Forward prop
-                outputs, _, _ = net(x_seq, grid_seq, hidden_states, cell_states, PedsList_seq, numPedsList_seq,
+                outputs, _, _ = net(x_seq, grid_seq, hidden_states, cell_states, peds_list_seq, num_peds_list_seq,
                                     valid_loader, lookup_seq)
 
                 # Increment number of seen sequences
                 num_seen_sequences += 1
 
                 # Compute loss
-                loss = Gaussian2DLikelihood(outputs, x_seq, PedsList_seq, lookup_seq)
+                loss = Gaussian2DLikelihood(outputs, x_seq, peds_list_seq, lookup_seq)
                 loss_batch += loss.item()
 
             total_loss += loss_batch

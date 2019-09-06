@@ -200,7 +200,7 @@ def train(args):
                 target_id_values = x_seq[0][lookup_seq[target_id], 0:2]
 
                 # vectorize trajectories in sequence
-                x_seq, _ = vectorize_seq(x_seq, PedsList_seq, lookup_seq)
+                x_seq, _ = vectorizeSeq(x_seq, PedsList_seq, lookup_seq)
 
                 if args.use_cuda:                    
                     x_seq = x_seq.cuda()
@@ -286,7 +286,7 @@ def train(args):
                     target_id_values = x_seq[0][lookup_seq[target_id], 0:2]
                     
                     #vectorize seq
-                    x_seq, first_values_dict = vectorize_seq(x_seq, PedsList_seq, lookup_seq)
+                    x_seq, first_values_dict = vectorizeSeq(x_seq, PedsList_seq, lookup_seq)
 
 
 
@@ -311,11 +311,11 @@ def train(args):
                     # Extract the mean, std and corr of the bivariate Gaussian
                     mux, muy, sx, sy, corr = getCoef(outputs)
                     # Sample from the bivariate Gaussian
-                    next_x, next_y = sample_gaussian_2d(mux.data, muy.data, sx.data, sy.data, corr.data, PedsList_seq[-1], lookup_seq)
+                    next_x, next_y = sampleGaussian2d(mux.data, muy.data, sx.data, sy.data, corr.data, PedsList_seq[-1], lookup_seq)
                     next_vals = torch.FloatTensor(1,numNodes,2)
                     next_vals[:,:,0] = next_x
                     next_vals[:,:,1] = next_y
-                    err = get_mean_error(next_vals, x_seq[-1].data[None, : ,:], [PedsList_seq[-1]], [PedsList_seq[-1]], args.use_cuda, lookup_seq)
+                    err = getMeanError(next_vals, x_seq[-1].data[None, : , :], [PedsList_seq[-1]], [PedsList_seq[-1]], args.use_cuda, lookup_seq)
 
                     loss_batch += loss.item()
                     err_batch += err
@@ -406,19 +406,19 @@ def train(args):
                     target_id_values = orig_x_seq[0][lookup_seq[target_id], 0:2]
                                         
                     #vectorize datapoints
-                    x_seq, first_values_dict = vectorize_seq(x_seq, PedsList_seq, lookup_seq)
+                    x_seq, first_values_dict = vectorizeSeq(x_seq, PedsList_seq, lookup_seq)
 
                     if args.use_cuda:                    
                         x_seq = x_seq.cuda()
 
-                    ret_x_seq, loss = sample_validation_data_vanilla(x_seq, PedsList_seq, args, net, lookup_seq, numPedsList_seq, dataloader)
+                    ret_x_seq, loss = sampleValidationDataVanilla(x_seq, PedsList_seq, args, net, lookup_seq, numPedsList_seq, dataloader)
                     
                     #revert the points back to original space
-                    ret_x_seq = revert_seq(ret_x_seq, PedsList_seq, lookup_seq, first_values_dict)
+                    ret_x_seq = revertSeq(ret_x_seq, PedsList_seq, lookup_seq, first_values_dict)
 
 
-                    err = get_mean_error(ret_x_seq.data, orig_x_seq.data, PedsList_seq, PedsList_seq, args.use_cuda, lookup_seq)
-                    f_err = get_final_error(ret_x_seq.data, orig_x_seq.data, PedsList_seq, PedsList_seq, lookup_seq)
+                    err = getMeanError(ret_x_seq.data, orig_x_seq.data, PedsList_seq, PedsList_seq, args.use_cuda, lookup_seq)
+                    f_err = getFinalError(ret_x_seq.data, orig_x_seq.data, PedsList_seq, PedsList_seq, lookup_seq)
                     
                     loss_batch += loss.item()
                     err_batch += err
@@ -455,7 +455,7 @@ def train(args):
                 print('Best epoch', best_epoch_val_data, 'Best validation loss', best_val_data_loss, 'Best error epoch',best_err_epoch_val_data, 'Best error', smallest_err_val_data)
                 log_file_curve.write("Validation dataset epoch: "+str(epoch)+" loss: "+str(loss_epoch)+" mean_err: "+str(err_epoch)+'final_err: '+str(f_err_epoch)+'\n')
 
-            optimizer = time_lr_scheduler(optimizer, epoch, lr_decay_epoch = args.freq_optimizer)
+            optimizer = timeLrScheduler(optimizer, epoch, lr_decay_epoch = args.freq_optimizer)
 
 
         # Save the model after each epoch
@@ -485,7 +485,7 @@ def train(args):
     #else:
     if validation_dataset_executed:
         dataloader.switch_to_dataset_type(load_data=False)
-        create_directories(plot_directory, [plot_train_file_directory])
+        createDirectories(plot_directory, [plot_train_file_directory])
         dataloader.write_to_plot_file(all_epoch_results[len(all_epoch_results)-1], os.path.join(plot_directory, plot_train_file_directory))
 
     # Close logging files
