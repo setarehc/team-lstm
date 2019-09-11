@@ -82,6 +82,7 @@ class SocialModel(nn.Module):
             
     #def forward(self, input_data, grids, hidden_states, cell_states ,PedsList, num_pedlist,dataloader, look_up):
     def forward(self, *args):
+        # TODO: Add social tensor calculation outside of model (in collate function)
 
         '''
         Forward pass for the model

@@ -638,26 +638,38 @@ def getSize(tensor):
     '''
     return torch.norm(tensor)
 
-def loadData(dataset_path, seq_length, keep_every, valid_percentage, batch_size, max_val_size, persons_to_keep):
+def loadData(dataset_path, seq_length, keep_every, valid_percentage, batch_size, max_val_size, persons_to_keep, filename=None):
     '''
     Dataset that creates and returns train/validation dataloaders of all datasets in dataset path
     :param dataset_path: path of datasets
     :param seq_length: original dataset sequence length (ped_data = 20 and basketball_data = 50)
     :param keep_every: # keeps every keep_every entries of the input dataset (to recreate Kevin Murphy's work, needs be set to 5)
     :param valid_percentage: percentage of validation data
+    :param batch_size: dataset batch_size
+    :param max_val_size: maximum size of validation (=1000)
+    :param persons_to_keep: binary list indicating persons to consider in dataset (for Kevin Murphy's setting = [1,1,1,1,1,1,0,0,0,0,0])
     :return: train_loader and valid_loader
     '''
-    # Determine the train files path
-    files_list = [f for f in listdir(dataset_path) if isfile(join(dataset_path, f))]
-    # Concat datasets associated to the files in train path
-    all_datasets = ConcatDataset([TrajectoryDataset(join(dataset_path, file), seq_length, keep_every, persons_to_keep) for file in files_list])
+    if filename is not None and os.path.exists(filename):
+        print(f'Dataset filename is given and the object exists. Loading from the dataset object file {filename}')
+        all_datasets = torch.load(filename)
+    else:
+        print('Dataset filename is not given or the object does not exist. Loading from the raw files')
+        # Determine the train files path
+        files_list = [f for f in listdir(dataset_path) if isfile(join(dataset_path, f))]
+        # Concat datasets associated to the files in train path
+        all_datasets = ConcatDataset([TrajectoryDataset(join(dataset_path, file), seq_length, keep_every, persons_to_keep) for file in files_list])
+        if filename is not None and not os.path.exists(filename):
+            print(f'Saving the dataset object to file {filename}')
+            torch.save(all_datasets, filename)
+
     valid_size = int(len(all_datasets) * valid_percentage / 100)
     if valid_size > max_val_size:
         valid_size = max_val_size
     train_size = len(all_datasets) - valid_size
     train_dataset, valid_dataset = torch.utils.data.random_split(all_datasets, [train_size, valid_size])
     # Create the data loader objects
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, num_workers=4, pin_memory=False,
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, num_workers=0, pin_memory=False,
                               collate_fn=lambda x: x)
     valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False, num_workers=0, pin_memory=False,
                               collate_fn=lambda x: x)

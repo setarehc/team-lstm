@@ -1,4 +1,5 @@
 from sacred import Ingredient
+import os
 
 common_ingredient = Ingredient('common')
 dataset_ingredient = Ingredient('dataset')
@@ -33,6 +34,11 @@ def commonCfg():
     save_dir = 'model'
 
     validate = False
+
+@common_ingredient.named_config
+def debug():
+    os.makedirs('/tmp/team_lstm_out', exist_ok=True)
+    save_dir='/tmp/team_lstm_out'
 
 
 @dataset_ingredient.config

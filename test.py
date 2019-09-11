@@ -31,8 +31,9 @@ def cfg():
     method = 1  # 'Method of lstm will be used (1 = social lstm, 2 = obstacle lstm, 3 = vanilla lstm)'
 
 
-def init(seed, config, _run):
+def init(seed, _config, _run):
     # Next five lines are to call args.seq_length instead of args.common.seq_length
+    config = {k: v for k, v in _config.items()}
     common_config = config['common']
     config.pop('common')
     for k, v in common_config.items():
@@ -220,7 +221,6 @@ def test(sample_args, _run):
             checkpoint = torch.load(checkpoint_path)
             model_epoch = checkpoint['epoch']
             net.load_state_dict(checkpoint['state_dict'])
-            import pdb; pdb.set_trace()
             print('Loaded checkpoint at epoch', model_epoch)
         else:
             raise ValueError('Incorrect checkpoint: file does not exist')

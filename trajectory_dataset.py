@@ -45,7 +45,7 @@ class TrajectoryDataset(Dataset):
         self.folder_path = folder_path
         self.seq_length = seq_length  # Original dataset sequence length (ped_data = 20 and basketball_data = 50)
         self.keep_every = keep_every  # Keeps every keep_every entries of the input dataset (to recreate Kevin Murphy's work, needs be set to 5)
-        self.persons_to_keep = persons_to_keep
+        self.persons_to_keep = persons_to_keep  # Keeps only persons i where persons_to_keep[i]=1 (to recreate Kevin Murphy's work, needs be set to [1,1,1,1,1,1,0,0,0,0,0])
 
         print('Now processing: ', folder_path)
 

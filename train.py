@@ -9,6 +9,7 @@ import utils
 from sacred.observers import MongoObserver
 from trajectory_dataset import *
 from test import testHelper
+import copy
 
 ex = sacred.Experiment('train', ingredients=[utils.common_ingredient, utils.dataset_ingredient])
 ex.observers.append(MongoObserver.create(url='localhost:27017', db_name='MY_DB'))
@@ -64,9 +65,12 @@ def cfg():
     # Method selection
     method = 1  # 'Method of lstm will be used (1 = social lstm, 2 = obstacle lstm, 3 = vanilla lstm)'
 
+    dataset_filename = None  # If given, will load the dataset from this path instead of processing the files.
 
-def init(seed, config, _run):
+
+def init(seed, _config, _run):
     # Next five lines are to call args.use_cuda instead of args.common.use_cuda
+    config = {k:v for k,v in _config.items()}
     common_config = config['common']
     config.pop('common')
     for k, v in common_config.items():
@@ -104,7 +108,7 @@ def train(args, _run):
     validation_epoch_list = list(range(args.freq_validation, args.num_epochs + 1, args.freq_validation))
     validation_epoch_list[-1] -= 1
 
-    train_loader, valid_loader = loadData(args.train_dataset_path, args.orig_seq_len, args.keep_every, args.valid_percentage, args.batch_size, args.max_val_size, args.persons_to_keep)
+    train_loader, valid_loader = loadData(args.train_dataset_path, args.orig_seq_len, args.keep_every, args.valid_percentage, args.batch_size, args.max_val_size, args.persons_to_keep, filename=args.dataset_filename)
 
     model_name = "LSTM"
     method_name = "SOCIALLSTM"
@@ -123,9 +127,10 @@ def train(args, _run):
     log_file = open(os.path.join(log_directory, method_name, model_name, 'val.txt'), 'w+')
 
     # model directory
-    save_directory = os.path.join(prefix, args.save_dir)
+    save_directory = os.path.join(prefix, args.save_dir) # TODO: What is prefix? If it's an argument, add it to your config. If it's useless, remote it
 
     # Save the arguments int the config file
+    os.makedirs(os.path.join(save_directory, method_name, model_name), exist_ok=True) #TODO: fix this!
     with open(os.path.join(save_directory, method_name, model_name, 'config.pkl'), 'wb') as f:
         pickle.dump(args, f)
 
