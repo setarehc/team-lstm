@@ -194,7 +194,8 @@ def test(sample_args, _run):
     # Debug: manually debug the code
     #path = 'data/basketball/small_test'
     path = sample_args.test_dataset_path
-    test_loader, _ = loadData(path, sample_args.orig_seq_len, sample_args.keep_every, 0, sample_args.batch_size, 0, sample_args.persons_to_keep)
+    test_loader, _ = loadData(path, sample_args.orig_seq_len, sample_args.keep_every, 0, sample_args.batch_size, 0,
+                              sample_args.persons_to_keep, filename=sample_args.dataset_filename)
 
     num_batches = math.floor(len(test_loader.dataset) / sample_args.batch_size)
 

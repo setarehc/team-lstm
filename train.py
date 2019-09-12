@@ -65,8 +65,6 @@ def cfg():
     # Method selection
     method = 1  # 'Method of lstm will be used (1 = social lstm, 2 = obstacle lstm, 3 = vanilla lstm)'
 
-    dataset_filename = None  # If given, will load the dataset from this path instead of processing the files.
-
 
 def init(seed, _config, _run):
     # Next five lines are to call args.use_cuda instead of args.common.use_cuda
