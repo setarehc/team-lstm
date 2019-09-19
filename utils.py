@@ -35,10 +35,6 @@ def commonCfg():
 
     validate = False
 
-    dataset_filename = None  # If given, will load the dataset from this path instead of processing the files.
-    if dataset_filename is not None:
-        os.makedirs(os.path.dirname(dataset_filename), exist_ok=True)
-
 @common_ingredient.named_config
 def debug():
     os.makedirs('/tmp/team_lstm_out', exist_ok=True)
