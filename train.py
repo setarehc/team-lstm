@@ -10,9 +10,11 @@ from sacred.observers import MongoObserver
 from trajectory_dataset import *
 from test import testHelper
 import copy
+from db import init
 
 ex = sacred.Experiment('train', ingredients=[utils.common_ingredient, utils.dataset_ingredient])
-ex.observers.append(MongoObserver.create(url='localhost:27017', db_name='MY_DB'))
+init(ex)
+#ex.observers.append(MongoObserver.create(url='localhost:27017', db_name='MY_DB'))
 ex.captured_out_filter = lambda text: 'Output capturing turned off.'
 
 @ex.config
