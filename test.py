@@ -3,13 +3,14 @@ import time
 import subprocess
 from helper import *
 from grid import getSequenceGridMask, getGridMask
-from types import SimpleNamespace
+from utils import DotDict
 import sacred
 import utils
 from sacred.observers import MongoObserver
 from trajectory_dataset import *
 from os import listdir
 from os.path import isfile, join
+import json
 
 ex = sacred.Experiment('test', ingredients=[utils.common_ingredient, utils.dataset_ingredient])
 #ex.observers.append(MongoObserver.create(url='localhost:27017', db_name='MY_DB'))
@@ -50,9 +51,8 @@ def init(seed, _config, _run):
         assert k not in config
         config[k] = v
 
-    args = SimpleNamespace(**config)
+    args = DotDict(config)
     # utils.seedAll(seed) # TODO: implement seedAll
-    _run.info['args'] = args.__dict__
     return args
 
 
@@ -189,8 +189,8 @@ def test(sample_args, _run):
 
 
     # Define the path for the config file for saved args
-    with open(os.path.join(save_directory, 'config.pkl'), 'rb') as f:
-        saved_args = pickle.load(f)
+    with open(os.path.join(save_directory, 'config.json'), 'rb') as f:
+        saved_args = DotDict(json.load(f))
 
     seq_len = sample_args.seq_length
 

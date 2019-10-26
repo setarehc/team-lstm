@@ -3,17 +3,18 @@ import pickle
 import subprocess
 from grid import getSequenceGridMask
 from helper import *
-from types import SimpleNamespace
+from utils import DotDict
 import sacred
 import utils
 from sacred.observers import MongoObserver
 from trajectory_dataset import *
 from test import testHelper
 import copy
-from db import init
+import db
+import json
 
 ex = sacred.Experiment('train', ingredients=[utils.common_ingredient, utils.dataset_ingredient])
-init(ex)
+db.init(ex)
 #ex.observers.append(MongoObserver.create(url='localhost:27017', db_name='MY_DB'))
 ex.captured_out_filter = lambda text: 'Output capturing turned off.'
 
@@ -48,15 +49,6 @@ def cfg():
     # Lambda regularization parameter (L2)
     lambda_param = 0.0005  # L2 regularization parameter
 
-    # number of validation will be used
-    num_validation = 2  # Total number of validation dataset for validate accuracy
-
-    # frequency of validation
-    freq_validation = 1  # Frequency number(epoch) of validation using validation data
-
-    # frequency of optimazer learning decay
-    freq_optimizer = 8  # Frequency number(epoch) of learning decay for optimizer
-
     # store grids in epoch 0 and use further.2 times faster -> Intensive memory use around 12 GB
     grid = True  # Whether store grids and use further epoch
 
@@ -88,9 +80,8 @@ def init(seed, _config, _run):
         assert k not in config
         config[k] = v
 
-    args = SimpleNamespace(**config)
+    args = DotDict(config)
     # utils.seedAll(seed) # TODO: implement seedAll
-    _run.info['args'] = args.__dict__
     return args
 
 
@@ -107,10 +98,6 @@ def train(args, _run):
     if not os.path.isdir("log/"):
         print("Directory creation script is running...")
         subprocess.call([f_prefix + '/make_directories.sh'])
-
-    args.freq_validation = np.clip(args.freq_validation, 0, args.num_epochs)
-    validation_epoch_list = list(range(args.freq_validation, args.num_epochs + 1, args.freq_validation))
-    validation_epoch_list[-1] -= 1
 
     train_loader, valid_loader = loadData(args.train_dataset_path, args.orig_seq_len, args.keep_every, args.valid_percentage, args.batch_size, args.max_val_size, args.persons_to_keep, filename=args.dataset_filename)
 
@@ -135,8 +122,8 @@ def train(args, _run):
 
     # Save the arguments int the config file
     os.makedirs(os.path.join(save_directory, method_name, model_name), exist_ok=True) #TODO: fix this!
-    with open(os.path.join(save_directory, method_name, model_name, 'config.pkl'), 'wb') as f:
-        pickle.dump(args, f)
+    with open(os.path.join(save_directory, method_name, model_name, 'config.json'), 'w') as f:
+        json.dump(args, f)
 
     # Path to store the checkpoint file (trained model)
     def checkpoint_path(x):
@@ -281,7 +268,7 @@ def train(args, _run):
 
         # Sacred metrics plot
         _run.log_scalar(metric_name='train.loss', value=loss_epoch, step=epoch)
-
+        
         if args.validate:
             # Validate
             if len(valid_loader) > 0:

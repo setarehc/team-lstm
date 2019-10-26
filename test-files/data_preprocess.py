@@ -29,8 +29,9 @@ def preprocessData(source_dir, target_dir, seq_length=20):
     np.savetxt('..' + target_dir, df.values, fmt='%d %d %f %f')
 
 
-data_dirs = ['/data/raw/eth/hotel/', '/data/raw/eth/univ/', '/data/raw/ucy/univ/', '/data/raw/ucy/zara/zara01/', '/data/raw/ucy/zara/zara02/']
-target_names = ['hotel.txt', 'eth.txt', 'ucy.txt', 'zara01.txt', 'zara02.txt']
-# Call preprocess on all 5 datasets
-for idx, dir in enumerate(data_dirs):
-    preprocessData(dir + 'pixel_pos.csv', dir + target_names[idx])
+if __name__ == '__main__':
+    data_dirs = ['/data/raw/eth/hotel/', '/data/raw/eth/univ/', '/data/raw/ucy/univ/', '/data/raw/ucy/zara/zara01/', '/data/raw/ucy/zara/zara02/']
+    target_dirs = ['/data/original/hotel.txt', '/data/original/eth.txt', '/data/original/ucy.txt', '/data/original/zara01.txt', '/data/original/zara02.txt']
+    # Call preprocess on all 5 datasets
+    for idx, dir in enumerate(data_dirs):
+        preprocessData(dir + 'pixel_pos.csv', target_dirs[idx])

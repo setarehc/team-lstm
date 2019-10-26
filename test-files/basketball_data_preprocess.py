@@ -14,7 +14,6 @@ num_of_ints = 16
 
 def readPossessionFile(file_name, num_of_ints, pos = 0):
     res_tuples =[]
-    df = pd.DataFrame(columns=['ball', 'p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9', 'p10', 'l1', 'l2', 'l3', 'l4', 'goal'])
     f = open(file_name, 'rb')
     # Change the current file position to the last byte
     f.seek(0, 2)
@@ -40,7 +39,7 @@ def loadIntegers(fn, num, pos = 0):
     return np.array(tup)
 
 
-path = 'data/raw_basketball/eval/'
+path = 'data/raw_basketball/train/'
 files_list = [f for f in listdir(path) if isfile(join(path, f))]
 
 # Set according to teh dataset description
@@ -48,7 +47,7 @@ max_num_frames = 70
 max_num_players = 10
 num_players_plus_ball = 11
 
-target_dir = 'data/basketball/total_test/basketball_total_test_'
+target_dir = 'data/basketball/total_train/basketball_total_train_'
 
 '''
 # Get the minimum length of possessions:
