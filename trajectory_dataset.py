@@ -88,7 +88,7 @@ class TrajectoryDataset(Dataset):
             elif group_count > self.seq_length:
                 excess_count = group_count - self.seq_length
                 df = df.drop((group.index[-excess_count:]))
-
+        
         # Keep every self.keep_every entries of the input dataset
         del_list = [idx for idx in list(df.index.data) if idx % self.keep_every != 0]
         df = df.drop(df.index[del_list])
@@ -104,7 +104,7 @@ class TrajectoryDataset(Dataset):
         person_to_frames = {}
         for person in target_ids:
             person_to_frames[person] = data[data[:, 1] == person][:, 0]
-
+        
         orig_data.append(data)
 
         frame_list = data[:, 0].tolist()
@@ -131,7 +131,7 @@ class TrajectoryDataset(Dataset):
             frame_to_data[frame] = persons_with_pos
             frame_to_persons[frame] = persons_list
             frame_to_num_persons[frame] = len(persons_list)
-
+        
         return frame_to_data, frame_list, frame_to_num_persons, frame_to_persons, orig_data, idx_to_person, person_to_frames
 
     @property
@@ -181,11 +181,10 @@ if __name__ == '__main__':
         if len(batch) < 5:
             print(batch_idx)
     '''
-
-    d = TrajectoryDataset('data/original/train/hotel.txt')
+    dset = TrajectoryDataset('data/original/train/hotel.txt')
     batch_size = 5
     #assert batch_size == 1
-    dataloader = DataLoader(d, batch_size=batch_size, shuffle=False, num_workers=0, pin_memory=False, collate_fn=lambda x: x)
+    dataloader = DataLoader(dset, batch_size=batch_size, shuffle=False, num_workers=0, pin_memory=False, collate_fn=lambda x: x)
 
     print(len(dataloader))
     print(len(dataloader.dataset))
