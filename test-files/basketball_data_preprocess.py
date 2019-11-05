@@ -67,7 +67,6 @@ for i, file in enumerate(train_files):
 print(min_length, max_length)
 '''
 
-
 for i, file in enumerate(files_list):
     # Read current file
     res = readPossessionFile(join(path, file), num_of_ints)
@@ -100,17 +99,19 @@ for i, file in enumerate(files_list):
     np.savetxt(target_dir+str(i)+'.txt', players_df.values, fmt='%d %d %f %f')
 
 
-'''
-res = read_possession_file('../data/raw_basketball/train/poss-0_len-70.bin', num_of_ints)
-df = pd.DataFrame(res, columns=['ball', 'p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9', 'p10', 'l1', 'l2', 'l3', 'l4', 'goal'])
-# Delete unnecessary columns
-df = df.drop(['ball', 'l1', 'l2', 'l3', 'l4', 'goal'], axis=1)
-players_df = pd.DataFrame(columns = ['frame_num', 'player_id', 'y', 'x'])
-for i, player in enumerate(df.columns):
-    num_of_frames = df[player].count()
-    frame_num_col = np.array(range(num_of_frames))
-    player_id_col = np.full((num_of_frames), i)
-    pos_y = np.floor(df[player].values / court_width)
-    pos_x = df[player].values % court_width
-    players_df = pd.concat([players_df, pd.DataFrame({'frame_num': frame_num_col, 'player_id': player_id_col, 'y': pos_y, 'x': pos_x}, columns=['frame_num', 'player_id', 'y', 'x'])])
-'''
+# Test Block
+if __name__ == '__main__':
+    res = readPossessionFile('data/raw_basketball/train/poss-0_len-70.bin', num_of_ints)
+    df = pd.DataFrame(res, columns=['ball', 'p1', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9', 'p10', 'l1', 'l2', 'l3', 'l4', 'goal'])
+    # Delete unnecessary columns
+    df = df.drop(['ball', 'l1', 'l2', 'l3', 'l4', 'goal'], axis=1)
+    players_df = pd.DataFrame(columns = ['frame_num', 'player_id', 'y', 'x'])
+    for i, player in enumerate(df.columns):
+        num_of_frames = df[player].count()
+        frame_num_col = np.array(range(num_of_frames))
+        player_id_col = np.full((num_of_frames), i)
+        pos_y = np.floor(df[player].values / court_width)
+        pos_x = df[player].values % court_width
+        players_df = pd.concat([players_df, pd.DataFrame({'frame_num': frame_num_col, 'player_id': player_id_col, 'y': pos_y, 'x': pos_x}, columns=['frame_num', 'player_id', 'y', 'x'])])
+
+    print(players_df.values[:200])
