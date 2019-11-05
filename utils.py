@@ -31,7 +31,8 @@ def commonCfg():
     drive = False   # Use Google drive or not
 
     # Model will be saved in this directory
-    save_dir = 'model'
+    save_dir = 'models'
+    save_prefix = None
 
     validate = False
 

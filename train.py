@@ -89,15 +89,13 @@ def train(args, _run):
     origin = (0, 0)
     reference_point = (0, 1)
 
-    prefix = ''
-    f_prefix = '.'
-    if args.drive is True:
-        prefix = 'drive/semester_project/social_lstm_final/'
-        f_prefix = 'drive/semester_project/social_lstm_final'
-
-    if not os.path.isdir("log/"):
-        print("Directory creation script is running...")
-        subprocess.call([f_prefix + '/make_directories.sh'])
+    # Set directory to save the trained model
+    inner_dir = args.save_prefix
+    if inner_dir is None:
+        inner_dir = 'tmp' if _run._id is None else str(_run._id)
+    save_directory = os.path.join(args.save_dir, inner_dir)
+    if os.path.isdir(save_directory):
+        shutil.rmtree(save_directory)
 
     train_loader, valid_loader = loadData(args.train_dataset_path, args.orig_seq_len, args.keep_every, args.valid_percentage, args.batch_size, args.max_val_size, args.persons_to_keep, filename=args.dataset_filename)
 
@@ -108,26 +106,14 @@ def train(args, _run):
         model_name = "GRU"
         save_tar_name = method_name + "_gru_model_"
 
-    # Log directory
-    log_directory = os.path.join(prefix, 'log/')
-    plot_directory = os.path.join(prefix, 'plot/', method_name, model_name)
-    plot_train_file_directory = 'validation'
-
-    # Logging files
-    log_file_curve = open(os.path.join(log_directory, method_name, model_name, 'log_curve.txt'), 'w+')
-    log_file = open(os.path.join(log_directory, method_name, model_name, 'val.txt'), 'w+')
-
-    # model directory
-    save_directory = os.path.join(prefix, args.save_dir) # TODO: What is prefix? If it's an argument, add it to your config. If it's useless, remote it
-
     # Save the arguments int the config file
-    os.makedirs(os.path.join(save_directory, method_name, model_name), exist_ok=True) #TODO: fix this!
-    with open(os.path.join(save_directory, method_name, model_name, 'config.json'), 'w') as f:
+    os.makedirs(save_directory, exist_ok=True) #TODO: fix this!
+    with open(os.path.join(save_directory, 'config.json'), 'w') as f:
         json.dump(args, f)
 
     # Path to store the checkpoint file (trained model)
     def checkpoint_path(x):
-        return os.path.join(save_directory, method_name, model_name, save_tar_name + str(x) + '.tar')
+        return os.path.join(save_directory, save_tar_name + str(x) + '.tar')
 
     # model creation
     net = SocialModel(args)
@@ -264,7 +250,7 @@ def train(args, _run):
         loss_epoch /= num_seen_sequences
 
         # Log loss values
-        log_file_curve.write("Training epoch: " + str(epoch) + " loss: " + str(loss_epoch) + '\n')
+        #log_file_curve.write("Training epoch: " + str(epoch) + " loss: " + str(loss_epoch) + '\n')
 
         # Sacred metrics plot
         _run.log_scalar(metric_name='train.loss', value=loss_epoch, step=epoch)
@@ -299,8 +285,8 @@ def train(args, _run):
         }, checkpoint_path(epoch))
 
     # Close logging files
-    log_file.close()
-    log_file_curve.close()
+    # log_file.close()
+    # log_file_curve.close()
 
 def validLoss(net, valid_loader, args):
     '''
