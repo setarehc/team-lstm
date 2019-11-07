@@ -7,7 +7,8 @@ import shutil
 from os import walk
 import math
 
-from nets.social_lstm import SocialModel
+from nets import SocialModel
+from nets import GraphModel
 from olstm_model import OLSTMModel
 from vlstm_model import VLSTMModel
 

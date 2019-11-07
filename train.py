@@ -116,7 +116,12 @@ def train(args, _run):
         return os.path.join(save_directory, save_tar_name + str(x) + '.tar')
 
     # model creation
-    net = SocialModel(args)
+    if args.model == 'social':
+        net = SocialModel(args)
+    elif args.model == 'graph':
+        net = GraphModel(args)
+    else:
+        raise ValueError(f'Unexpected value for args.model ({args.model})')
     if args.use_cuda:
         net = net.cuda()
 

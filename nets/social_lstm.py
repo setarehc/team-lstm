@@ -58,7 +58,7 @@ class SocialModel(BaseModel):
         social_tensor = social_tensor.view(numNodes, self.grid_size*self.grid_size*self.rnn_size)
         return social_tensor
             
-    def forward(self, input_data, grids, hidden_states, cell_states ,PedsList, num_pedlist, look_up):
+    def forward(self, input_data, grids, hidden_states, cell_states, PedsList, num_pedlist, look_up):
         # TODO: Add social tensor calculation outside of model (in collate function)
 
         '''

@@ -6,6 +6,8 @@ dataset_ingredient = Ingredient('dataset')
 
 @common_ingredient.config
 def commonCfg():
+    model = 'social'
+
     input_size = 2
     output_size = 5
 
@@ -35,6 +37,9 @@ def commonCfg():
     save_prefix = None
 
     validate = False
+
+    # Argument verification
+    assert model in ['social', 'graph']
 
 @common_ingredient.named_config
 def debug():
