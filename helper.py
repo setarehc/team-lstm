@@ -7,7 +7,7 @@ import shutil
 from os import walk
 import math
 
-from model import SocialModel
+from nets.social_lstm import SocialModel
 from olstm_model import OLSTMModel
 from vlstm_model import VLSTMModel
 
@@ -35,13 +35,13 @@ def getMethodName(index):
 def getModel(index, arguments, infer = False):
     # return a model given index and arguments
     if index == 1:
-        return SocialModel(arguments, infer)
+        return SocialModel(arguments)
     elif index == 2:
         return OLSTMModel(arguments, infer)
     elif index == 3:
         return VLSTMModel(arguments, infer)
     else:
-        return SocialModel(arguments, infer)
+        return SocialModel(arguments)
 
 def getCoef(outputs):
     '''

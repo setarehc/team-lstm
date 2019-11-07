@@ -8,17 +8,15 @@ from .base import BaseModel
 
 class SocialModel(BaseModel):
 
-    def __init__(self, args, infer=False):
+    def __init__(self, args):
         '''
         Initializer function
         params:
         args: Training arguments
-        infer: Training or test time (true if test time)
         '''
         super(SocialModel, self).__init__()
 
         self.args = args
-        self.infer = infer
         self.use_cuda = args.use_cuda
         
         # Store required sizes
