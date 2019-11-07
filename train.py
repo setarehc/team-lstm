@@ -180,7 +180,7 @@ def train(args, _run):
 
                 # Forward prop
                 outputs, _, _ = net(x_seq, grid_seq, hidden_states, cell_states, peds_list_seq, num_peds_list_seq,
-                                    train_loader, lookup_seq)
+                                    lookup_seq)
 
                 # Increment number of seen sequences
                 num_seen_sequences += 1
@@ -341,7 +341,7 @@ def validLoss(net, valid_loader, args):
 
                 # Forward prop
                 outputs, _, _ = net(x_seq, grid_seq, hidden_states, cell_states, peds_list_seq, num_peds_list_seq,
-                                    valid_loader, lookup_seq)
+                                    lookup_seq)
 
                 # Increment number of seen sequences
                 num_seen_sequences += 1

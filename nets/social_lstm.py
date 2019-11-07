@@ -14,31 +14,16 @@ class SocialModel(BaseModel):
         params:
         args: Training arguments
         '''
-        super(SocialModel, self).__init__()
-
-        self.args = args
-        self.use_cuda = args.use_cuda
+        super(SocialModel, self).__init__(args)
         
         # Store required sizes
-        self.rnn_size = args.rnn_size
         self.grid_size = args.grid_size
-        self.embedding_size = args.embedding_size
-        self.input_size = args.input_size
-        self.output_size = args.output_size
-        self.maxNumPeds = args.maxNumPeds
-        self.seq_length = args.seq_length
-        self.gru = args.gru
 
 
         # The LSTM cell
         self.cell = nn.LSTMCell(2*self.embedding_size, self.rnn_size)
 
-        if self.gru:
-            self.cell = nn.GRUCell(2*self.embedding_size, self.rnn_size)
 
-
-        # Linear layer to embed the input position
-        self.input_embedding_layer = nn.Linear(self.input_size, self.embedding_size)
         # Linear layer to embed the social tensor
         self.tensor_embedding_layer = nn.Linear(self.grid_size*self.grid_size*self.rnn_size, self.embedding_size)
 
@@ -73,8 +58,7 @@ class SocialModel(BaseModel):
         social_tensor = social_tensor.view(numNodes, self.grid_size*self.grid_size*self.rnn_size)
         return social_tensor
             
-    #def forward(self, input_data, grids, hidden_states, cell_states ,PedsList, num_pedlist,dataloader, look_up):
-    def forward(self, *args):
+    def forward(self, input_data, grids, hidden_states, cell_states ,PedsList, num_pedlist, look_up):
         # TODO: Add social tensor calculation outside of model (in collate function)
 
         '''
@@ -91,19 +75,6 @@ class SocialModel(BaseModel):
         hidden_states
         cell_states
         '''
-        # Construct the output variable
-        input_data = args[0]
-        grids = args[1]
-        hidden_states = args[2]
-        cell_states = args[3]
-
-        if self.gru:
-            cell_states = None
-
-        PedsList = args[4]
-        num_pedlist = args[5]
-        dataloader = args[6]
-        look_up = args[7]
 
         numNodes = len(look_up)
         outputs = Variable(torch.zeros(self.seq_length * numNodes, self.output_size))
@@ -114,7 +85,6 @@ class SocialModel(BaseModel):
         for framenum,frame in enumerate(input_data):
 
             # Peds present in the current frame
-            #nodeIDs_boundary = num_pedlist[framenum]
             nodeIDs = [int(nodeID) for nodeID in PedsList[framenum]]
 
             if len(nodeIDs) == 0:
@@ -125,7 +95,7 @@ class SocialModel(BaseModel):
             # List of nodes
             list_of_nodes = [look_up[x] for x in nodeIDs]
 
-            corr_index = Variable((torch.LongTensor(list_of_nodes)))
+            corr_index = Variable((torch.LongTensor(list_of_nodes))) 
             if self.use_cuda:            
                 corr_index = corr_index.cuda()
 
@@ -136,9 +106,7 @@ class SocialModel(BaseModel):
 
             # Get the corresponding hidden and cell states
             hidden_states_current = torch.index_select(hidden_states, 0, corr_index)
-
-            if not self.gru:
-                cell_states_current = torch.index_select(cell_states, 0, corr_index)
+            cell_states_current = torch.index_select(cell_states, 0, corr_index)
 
             # Compute the social tensor
             social_tensor = self.getSocialTensor(grid_current, hidden_states_current)
@@ -151,11 +119,8 @@ class SocialModel(BaseModel):
             # Concat input
             concat_embedded = torch.cat((input_embedded, tensor_embedded), 1)
 
-            if not self.gru:
-                # One-step of the LSTM
-                h_nodes, c_nodes = self.cell(concat_embedded, (hidden_states_current, cell_states_current))
-            else:
-                h_nodes = self.cell(concat_embedded, (hidden_states_current))
+            # One-step of the LSTM
+            h_nodes, c_nodes = self.cell(concat_embedded, (hidden_states_current, cell_states_current))
 
 
             # Compute the output
@@ -163,8 +128,7 @@ class SocialModel(BaseModel):
 
             # Update hidden and cell states
             hidden_states[corr_index.data] = h_nodes
-            if not self.gru:
-                cell_states[corr_index.data] = c_nodes
+            cell_states[corr_index.data] = c_nodes
 
         # Reshape outputs
         outputs_return = Variable(torch.zeros(self.seq_length, numNodes, self.output_size))

@@ -291,12 +291,12 @@ def sample(x_seq, Pedlist, args, net, true_x_seq, true_Pedlist, saved_args, dime
             if grid is None:  # vanilla lstm
                 # Do a forward prop
                 out_obs, hidden_states, cell_states = net(x_seq[tstep].view(1, numx_seq, 2), hidden_states, cell_states,
-                                                          [Pedlist[tstep]], [num_pedlist[tstep]], test_loader, look_up)
+                                                          [Pedlist[tstep]], [num_pedlist[tstep]], look_up)
             else:
                 # Do a forward prop
                 out_obs, hidden_states, cell_states = net(x_seq[tstep].view(1, numx_seq, 2), [grid[tstep]],
                                                           hidden_states, cell_states, [Pedlist[tstep]],
-                                                          [num_pedlist[tstep]], test_loader, look_up)
+                                                          [num_pedlist[tstep]], look_up)
             # loss_obs = Gaussian2DLikelihood(out_obs, x_seq[tstep+1].view(1, numx_seq, 2), [Pedlist[tstep+1]])
 
             # Extract the mean, std and corr of the bivariate Gaussian
@@ -324,16 +324,16 @@ def sample(x_seq, Pedlist, args, net, true_x_seq, true_Pedlist, saved_args, dime
             if grid is None:  # vanilla lstm
                 outputs, hidden_states, cell_states = net(ret_x_seq[tstep].view(1, numx_seq, 2), hidden_states,
                                                           cell_states, [true_Pedlist[tstep]], [num_pedlist[tstep]],
-                                                          test_loader, look_up)
+                                                          look_up)
             else:
                 if tstep == args.obs_length - 1:
                     outputs, hidden_states, cell_states = net(x_seq[tstep].view(1, numx_seq, 2), [prev_grid],
                                                               hidden_states, cell_states, [true_Pedlist[tstep]],
-                                                              [num_pedlist[tstep]], test_loader, look_up)
+                                                              [num_pedlist[tstep]], look_up)
                 else:
                     outputs, hidden_states, cell_states = net(ret_x_seq[tstep].view(1, numx_seq, 2), [prev_grid],
                                                           hidden_states, cell_states, [true_Pedlist[tstep]],
-                                                          [num_pedlist[tstep]], test_loader, look_up)
+                                                          [num_pedlist[tstep]], look_up)
 
             # Extract the mean, std and corr of the bivariate Gaussian
             mux, muy, sx, sy, corr = getCoef(outputs)
