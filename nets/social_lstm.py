@@ -4,7 +4,9 @@ import numpy as np
 
 from torch.autograd import Variable
 
-class SocialModel(nn.Module):
+from .base import BaseModel
+
+class SocialModel(BaseModel):
 
     def __init__(self, args, infer=False):
         '''
