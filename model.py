@@ -18,22 +18,15 @@ class SocialModel(nn.Module):
         self.args = args
         self.infer = infer
         self.use_cuda = args.use_cuda
-
-        if infer:
-            # Test time
-            self.seq_length = 1
-        else:
-            # Training time
-            self.seq_length = args.seq_length
-
+        
         # Store required sizes
         self.rnn_size = args.rnn_size
         self.grid_size = args.grid_size
         self.embedding_size = args.embedding_size
         self.input_size = args.input_size
         self.output_size = args.output_size
-        self.maxNumPeds=args.maxNumPeds
-        self.seq_length=args.seq_length
+        self.maxNumPeds = args.maxNumPeds
+        self.seq_length = args.seq_length
         self.gru = args.gru
 
 
@@ -98,12 +91,6 @@ class SocialModel(nn.Module):
         hidden_states
         cell_states
         '''
-        # List of tensors each of shape args.maxNumPedsx3 corresponding to each frame in the sequence
-            # frame_data = tf.split(0, args.seq_length, self.input_data, name="frame_data")
-        #frame_data = [torch.squeeze(input_, [0]) for input_ in torch.split(0, self.seq_length, input_data)]
-        
-        #print("***************************")
-        #print("input data")
         # Construct the output variable
         input_data = args[0]
         grids = args[1]
@@ -127,10 +114,6 @@ class SocialModel(nn.Module):
         for framenum,frame in enumerate(input_data):
 
             # Peds present in the current frame
-
-            #print("now processing: %s base frame number: %s, in-frame: %s"%(dataloader.get_test_file_name(), dataloader.frame_pointer, framenum))
-            #print("list of nodes")
-
             #nodeIDs_boundary = num_pedlist[framenum]
             nodeIDs = [int(nodeID) for nodeID in PedsList[framenum]]
 
@@ -140,45 +123,31 @@ class SocialModel(nn.Module):
 
 
             # List of nodes
-            #print("lookup table :%s"% look_up)
             list_of_nodes = [look_up[x] for x in nodeIDs]
 
             corr_index = Variable((torch.LongTensor(list_of_nodes)))
             if self.use_cuda:            
                 corr_index = corr_index.cuda()
 
-            #print("list of nodes: %s"%nodeIDs)
-            #print("trans: %s"%corr_index)
-            #if self.use_cuda:
-             #   list_of_nodes = list_of_nodes.cuda()
-
-
-            #print(list_of_nodes.data)
             # Select the corresponding input positions
             nodes_current = frame[list_of_nodes,:]
             # Get the corresponding grid masks
             grid_current = grids[framenum]
 
-            
-
-
             # Get the corresponding hidden and cell states
             hidden_states_current = torch.index_select(hidden_states, 0, corr_index)
-
 
             if not self.gru:
                 cell_states_current = torch.index_select(cell_states, 0, corr_index)
 
-            #print(grid_current.shape)
-            #print(hidden_states_current.shape)
             # Compute the social tensor
             social_tensor = self.getSocialTensor(grid_current, hidden_states_current)
-
-            # Embed inputs
-            input_embedded = self.dropout(self.relu(self.input_embedding_layer(nodes_current)))
             # Embed the social tensor
             tensor_embedded = self.dropout(self.relu(self.tensor_embedding_layer(social_tensor)))
 
+            # Embed inputs
+            input_embedded = self.dropout(self.relu(self.input_embedding_layer(nodes_current)))
+            
             # Concat input
             concat_embedded = torch.cat((input_embedded, tensor_embedded), 1)
 

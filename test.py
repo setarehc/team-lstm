@@ -177,15 +177,15 @@ def test(sample_args, _run):
         save_tar_name = method_name+"_gru_model_"
 
     #print("Selected method name: ", method_name, " model name: ", model_name)
+    save_dir = 'model'
 
     # Save directory
-    save_directory = os.path.join(f_prefix, sample_args.save_dir, method_name, model_name)
+    save_directory = os.path.join(f_prefix, save_dir, method_name, model_name)
     #plot directory for plotting in the future
     plot_directory = os.path.join(f_prefix, 'plot/', method_name, model_name)
 
     result_directory = os.path.join(f_prefix, 'result/', method_name)
     plot_test_file_directory = 'test'
-
 
 
     # Define the path for the config file for saved args
