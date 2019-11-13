@@ -29,7 +29,7 @@ def cfg():
     iteration = 1  # 'Number of iteration to create test file (smallest test error will be selected)'
 
     # Method selection
-    method = 1  # 'Method of lstm will be used (1 = social lstm, 2 = obstacle lstm, 3 = vanilla lstm)'
+    method = 1  # 'Method of lstm will be used (1 = social/graph lstm, 2 = obstacle lstm, 3 = vanilla lstm)'
 
     dataset_filename = None  # If given, will load the dataset from this path instead of processing the files.
     if dataset_filename is not None:
@@ -82,7 +82,7 @@ def testHelper(net, test_loader, sample_args, saved_args):
 
         # Get processing file name and then get dimensions of file
         folder_name = getFolderName(folder_path, sample_args.dataset)
-        dataset_data = dataset_dimensions[folder_name]
+        dataset_dim = dataset_dimensions[folder_name]
 
         # Dense vector creation
         x_seq, lookup_seq = convertToTensor(x_seq, peds_list_seq)
@@ -92,10 +92,10 @@ def testHelper(net, test_loader, sample_args, saved_args):
 
         # Grid mask calculation
         if sample_args.method == 2:  # obstacle lstm
-            grid_seq = getSequenceGridMask(x_seq, dataset_data, peds_list_seq, saved_args.neighborhood_size,
+            grid_seq = getSequenceGridMask(x_seq, dataset_dim, peds_list_seq, saved_args.neighborhood_size,
                                            saved_args.grid_size, saved_args.use_cuda, True)
         elif sample_args.method == 1:  # social lstm
-            grid_seq = getSequenceGridMask(x_seq, dataset_data, peds_list_seq, saved_args.neighborhood_size,
+            grid_seq = getSequenceGridMask(x_seq, dataset_dim, peds_list_seq, saved_args.neighborhood_size,
                                            saved_args.grid_size, saved_args.use_cuda)
 
         # Replace relative positions with true positions in x_seq
@@ -112,7 +112,7 @@ def testHelper(net, test_loader, sample_args, saved_args):
             # Extract the observed part of the trajectories
             obs_traj, obs_PedsList_seq = x_seq[:sample_args.obs_length], peds_list_seq[:sample_args.obs_length]
             ret_x_seq = sample(obs_traj, obs_PedsList_seq, sample_args, net, x_seq, peds_list_seq, saved_args,
-                               dataset_data, test_loader, lookup_seq, num_peds_list_seq, sample_args.gru)
+                               dataset_dim, test_loader, lookup_seq, num_peds_list_seq, sample_args.gru)
 
         else:
             # Extract the observed part of the trajectories
@@ -120,7 +120,7 @@ def testHelper(net, test_loader, sample_args, saved_args):
                                                                                    :sample_args.obs_length], grid_seq[
                                                                                                              :sample_args.obs_length]
             ret_x_seq = sample(obs_traj, obs_PedsList_seq, sample_args, net, x_seq, peds_list_seq, saved_args,
-                               dataset_data, test_loader, lookup_seq, num_peds_list_seq, sample_args.gru, obs_grid)
+                               dataset_dim, test_loader, lookup_seq, num_peds_list_seq, sample_args.gru, obs_grid)
 
         # revert the points back to original space
         ret_x_seq = revertSeq(ret_x_seq, peds_list_seq, lookup_seq, first_values_dict)
@@ -181,6 +181,7 @@ def test(sample_args, _run):
 
     # Save directory
     save_directory = os.path.join(f_prefix, save_dir, method_name, model_name)
+    #save_directory = 'models/103'
     #plot directory for plotting in the future
     plot_directory = os.path.join(f_prefix, 'plot/', method_name, model_name)
 
@@ -198,8 +199,15 @@ def test(sample_args, _run):
     # Debug: manually debug the code
     #path = 'data/basketball/small_test'
     path = sample_args.test_dataset_path
-    test_loader, _ = loadData(path, sample_args.orig_seq_len, sample_args.keep_every, 0, sample_args.batch_size, 0,
-                              sample_args.persons_to_keep, filename=sample_args.dataset_filename)
+    datasets = buildDatasets(dataset_path=path,
+                             seq_length=sample_args.orig_seq_len,
+                             keep_every=sample_args.keep_every,
+                             persons_to_keep=sample_args.persons_to_keep, 
+                             filename=sample_args.dataset_filename)
+    test_loader, _ = loadData(all_datasets=datasets,
+                              valid_percentage=0,
+                              max_val_size=0,
+                              batch_size=sample_args.batch_size)
 
     num_batches = math.floor(len(test_loader.dataset) / sample_args.batch_size)
 
@@ -214,7 +222,7 @@ def test(sample_args, _run):
 
     for iteration in range(sample_args.iteration):
         # Initialize net
-        net = getModel(sample_args.method, saved_args, True)
+        net = getModel(sample_args.method, sample_args.model, saved_args, True)
 
         if sample_args.use_cuda:
             net = net.cuda()

@@ -97,8 +97,19 @@ def train(args, _run):
     if os.path.isdir(save_directory):
         shutil.rmtree(save_directory)
 
-    train_loader, valid_loader = loadData(args.train_dataset_path, args.orig_seq_len, args.keep_every, args.valid_percentage, args.batch_size, args.max_val_size, args.persons_to_keep, filename=args.dataset_filename)
+    # Load data
+    datasets = buildDatasets(dataset_path=args.train_dataset_path, 
+                             seq_length=args.orig_seq_len, 
+                             keep_every=args.keep_every,
+                             persons_to_keep=args.persons_to_keep, 
+                             filename=args.dataset_filename)
+    train_loader, valid_loader = loadData(all_datasets=datasets,
+                                          valid_percentage=args.valid_percentage,
+                                          max_val_size=args.max_val_size,
+                                          batch_size=args.batch_size,
+                                          args=args)
 
+    #TODO: fix model name based on 'social' or 'graph' 
     model_name = "LSTM"
     method_name = "SOCIALLSTM"
     save_tar_name = method_name + "_lstm_model_"
@@ -147,61 +158,26 @@ def train(args, _run):
                 continue
 
             # For each sequence
-            for sequence in range(args.batch_size):
-                # Get the data corresponding to the current sequence
-                x_seq, num_peds_list_seq, peds_list_seq, folder_path = batch[sequence]
-
-                # Dense vector (tensor) creation
-                x_seq, lookup_seq = convertToTensor(x_seq, peds_list_seq)
-
-                # Get processing file name and then get dimensions of file
-                folder_name = getFolderName(folder_path, args.dataset)
-                dataset_data = dataset_dimensions[folder_name]
-
-                # Grid mask calculation and storage depending on grid parameter
-                grid_seq = getSequenceGridMask(x_seq, dataset_data, peds_list_seq, args.neighborhood_size,
-                                               args.grid_size, args.use_cuda)
-
-                # Replace relative positions with true positions in x_seq
-                x_seq, _ = vectorizeSeq(x_seq, peds_list_seq, lookup_seq)
-
-                if args.use_cuda:
-                    x_seq = x_seq.cuda()
-
-                # Number of peds in this sequence
-                numNodes = len(lookup_seq)
-
-                hidden_states = Variable(torch.zeros(numNodes, args.rnn_size))
-                if args.use_cuda:
-                    hidden_states = hidden_states.cuda()
-
-                cell_states = Variable(torch.zeros(numNodes, args.rnn_size))
-                if args.use_cuda:
-                    cell_states = cell_states.cuda()
-
+            for batch_item in batch:
+                
+                batch_item = net.toCuda(batch_item)
+                
                 # Zero out gradients
                 net.zero_grad()
                 optimizer.zero_grad()
 
                 # Forward prop
-                outputs, _, _ = net(x_seq, grid_seq, hidden_states, cell_states, peds_list_seq, num_peds_list_seq,
-                                    lookup_seq)
+                outputs, _, _ = net(batch_item)
 
                 # Increment number of seen sequences
                 num_seen_sequences += 1
 
-                # Debug
-
-
                 # Compute loss
-                loss = Gaussian2DLikelihood(outputs, x_seq, peds_list_seq, lookup_seq)
+                loss = net.loss(outputs, batch_item)
                 loss_batch += loss.item()
 
                 # Free the memory
                 # *basketball*
-                del x_seq
-                del hidden_states
-                del cell_states
                 torch.cuda.empty_cache()
 
                 # Compute gradients
@@ -321,10 +297,10 @@ def validLoss(net, valid_loader, args):
 
                 # Get processing file name and then get dimensions of file
                 folder_name = getFolderName(folder_path, args.dataset)
-                dataset_data = dataset_dimensions[folder_name]
+                dataset_dim = dataset_dimensions[folder_name]
 
                 # Grid mask calculation and storage depending on grid parameter
-                grid_seq = getSequenceGridMask(x_seq, dataset_data, peds_list_seq, args.neighborhood_size,
+                grid_seq = getSequenceGridMask(x_seq, dataset_dim, peds_list_seq, args.neighborhood_size,
                                                args.grid_size, args.use_cuda)
 
                 # Vectorize trajectories in sequence
@@ -332,6 +308,8 @@ def validLoss(net, valid_loader, args):
 
                 if args.use_cuda:
                     x_seq = x_seq.cuda()
+                    for i in range(len(grid_seq)):
+                        grid_seq[i] = grid_seq[i].cuda()
 
                 # Number of peds in this sequence per frame
                 numNodes = len(lookup_seq)

@@ -33,10 +33,16 @@ def getMethodName(index):
         3 : 'VANILLALSTM'
     }.get(index, 'SOCIALLSTM')
 
-def getModel(index, arguments, infer = False):
+def getModel(index, model_type, arguments, infer = False):
     # return a model given index and arguments
+    # return a model given index, model_type and arguments
     if index == 1:
-        return SocialModel(arguments)
+        if model_type == 'social':
+            return SocialModel(arguments)
+        elif model_type == 'graph':
+            return GraphModel(arguments)
+        else:
+            raise ValueError(f'Unexpected value for args.model ({args.model})')
     elif index == 2:
         return OLSTMModel(arguments, infer)
     elif index == 3:
@@ -639,17 +645,15 @@ def getSize(tensor):
     '''
     return torch.norm(tensor)
 
-def loadData(dataset_path, seq_length, keep_every, valid_percentage, batch_size, max_val_size, persons_to_keep, filename=None):
+def buildDatasets(dataset_path, seq_length, keep_every, persons_to_keep, filename=None):
     '''
-    Dataset that creates and returns train/validation dataloaders of all datasets in dataset path
+    Function that creates and returns a concatinated dataset of all dataset files in dataset_path
     :param dataset_path: path of datasets
     :param seq_length: original dataset sequence length (ped_data = 20 and basketball_data = 50)
     :param keep_every: # keeps every keep_every entries of the input dataset (to recreate Kevin Murphy's work, needs be set to 5)
-    :param valid_percentage: percentage of validation data
-    :param batch_size: dataset batch_size
-    :param max_val_size: maximum size of validation (=1000)
     :param persons_to_keep: binary list indicating persons to consider in dataset (for Kevin Murphy's setting = [1,1,1,1,1,1,0,0,0,0,0])
-    :return: train_loader and valid_loader
+    :param filename = dataset filename where data is already stored or will be stored 
+    :return: a single concatinated dataset of type TrajectoryDataset
     '''
     if filename is not None and os.path.exists(filename):
         print(f'Dataset filename is given and the object exists. Loading from the dataset object file {filename}')
@@ -664,24 +668,38 @@ def loadData(dataset_path, seq_length, keep_every, valid_percentage, batch_size,
             print(f'Saving the dataset object to file {filename}')
             torch.save(all_datasets, filename)
 
-    valid_size = int(len(all_datasets) * valid_percentage / 100)
-    if valid_size > max_val_size:
-        valid_size = max_val_size
-    train_size = len(all_datasets) - valid_size
-    train_dataset, valid_dataset = torch.utils.data.random_split(all_datasets, [train_size, valid_size])
-    # Create the data loader objects
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, num_workers=0, pin_memory=False,
-                              collate_fn=lambda x: x)
-    valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False, num_workers=0, pin_memory=False,
-                              collate_fn=lambda x: x)
-
-    # Debug: overfit to a single sequence
-    #valid_loader = train_loader
-
-    return train_loader, valid_loader
+    return all_datasets
 
 
 def getFolderName(folder_path, dataset):
     if dataset in ['basketball', 'basketball_small', 'basketball_total']:
         return folder_path.split('/')[-3]
     return folder_path.split('/')[-1]
+
+
+def loadData(all_datasets, valid_percentage, max_val_size, batch_size, args):
+    '''
+    Function that creates and returns train/validation (or test) dataloaders of the input dataset (all_datasets)
+    :param valid_percentage: percentage of validation data
+    :param max_val_size: maximum size of validation (=1000)
+    :param batch_size: dataset batch_size
+    :return: train_loader and valid_loader (or test_loader)
+    '''
+    if args.model == 'social':
+        collate_fn = lambda x: SocialModel.collateFn(x, args)
+    elif args.model == 'graph':
+        collate_fn = lambda x: GraphModel.collateFn(x, args)
+    else:
+        raise ValueError(f'Unexpected value for args.model ({args.model})')
+
+    valid_size = int(len(all_datasets) * valid_percentage / 100)
+    if valid_size > max_val_size:
+        valid_size = max_val_size
+    train_size = len(all_datasets) - valid_size
+    train_dataset, valid_dataset = torch.utils.data.random_split(all_datasets, [train_size, valid_size])
+    # Create the data loader objects
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, num_workers=2, pin_memory=False,
+                              collate_fn=collate_fn)
+    valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False, num_workers=0, pin_memory=False,
+                              collate_fn=collate_fn)
+    return train_loader, valid_loader

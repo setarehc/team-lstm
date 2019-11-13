@@ -123,9 +123,7 @@ def getSequenceGridMask(sequence, dimensions, pedlist_seq, neighborhood_size, gr
     sequence_mask = []
 
     for i in range(sl):
-        mask = Variable(torch.from_numpy(getGridMask(sequence[i], dimensions, len(pedlist_seq[i]), neighborhood_size, grid_size, is_occupancy)).float())
-        if using_cuda:
-            mask = mask.cuda()
+        mask = torch.from_numpy(getGridMask(sequence[i], dimensions, len(pedlist_seq[i]), neighborhood_size, grid_size, is_occupancy)).float()
         sequence_mask.append(mask)
 
     return sequence_mask
