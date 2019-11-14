@@ -80,12 +80,17 @@ class SocialModel(BaseModel):
         cell_states
         '''
         input_data, grids, persons_list, _, lookup = batch_item
+        
+        # Set number of persons in sequence
         num_persons = len(lookup)
+
+        # Initialize hidden states, cell states and outputs
         if hidden_states == None: 
             hidden_states = torch.zeros(num_persons, self.rnn_size)
         if cell_states == None: 
             cell_states = torch.zeros(num_persons, self.rnn_size)
-        outputs = torch.zeros(self.seq_length * num_persons, self.output_size)
+        outputs = torch.zeros(self.seq_length, num_persons, self.output_size)
+
         if self.use_cuda:
             hidden_states = hidden_states.cuda()
             cell_states = cell_states.cuda()
@@ -93,62 +98,53 @@ class SocialModel(BaseModel):
 
         # For each frame in the sequence
         for framenum,frame in enumerate(input_data):
+            # Person_id of persons present in the current frame
+            person_ids = [int(nodeID) for nodeID in persons_list[framenum]]
 
-            # Peds present in the current frame
-            nodeIDs = [int(nodeID) for nodeID in persons_list[framenum]]
-
-            if len(nodeIDs) == 0:
-                # If no peds, then go to the next frame
+            if len(person_ids) == 0:
+                # If no persons, then go to the next frame
                 continue
 
-            # List of nodes
-            list_of_nodes = [lookup[x] for x in nodeIDs]
+            # List of indices of persons present in frame
+            list_of_indices = [lookup[x] for x in person_ids]
 
-            corr_index = (torch.LongTensor(list_of_nodes))
+            corr_indices = (torch.LongTensor(list_of_indices))
             if self.use_cuda:            
-                corr_index = corr_index.cuda()
+                corr_indices = corr_indices.cuda()
 
             # Select the corresponding input positions
-            nodes_current = frame[list_of_nodes,:]
+            positions = frame[list_of_indices,:]
+
             # Get the corresponding grid masks
-            grid_current = grids[framenum]
+            grid_masks = grids[framenum]
 
             # Get the corresponding hidden and cell states
-            hidden_states_current = torch.index_select(hidden_states, 0, corr_index)
-            cell_states_current = torch.index_select(cell_states, 0, corr_index)
+            hidden_states_current = torch.index_select(hidden_states, 0, corr_indices)
+            cell_states_current = torch.index_select(cell_states, 0, corr_indices)
 
             # Compute the social tensor
-            social_tensor = self.getSocialTensor(grid_current, hidden_states_current)
+            social_tensor = self.getSocialTensor(grid_masks, hidden_states_current)
+
             # Embed the social tensor
             tensor_embedded = self.dropout(self.relu(self.tensor_embedding_layer(social_tensor)))
 
             # Embed inputs
-            input_embedded = self.dropout(self.relu(self.input_embedding_layer(nodes_current)))
+            input_embedded = self.dropout(self.relu(self.input_embedding_layer(positions)))
             
             # Concat input
             concat_embedded = torch.cat((input_embedded, tensor_embedded), 1)
-            import pdb; pdb.set_trace()
 
             # One-step of the LSTM
             h_nodes, c_nodes = self.cell(concat_embedded, (hidden_states_current, cell_states_current))
 
-
             # Compute the output
-            outputs[framenum*num_persons + corr_index.data] = self.output_layer(h_nodes)
+            outputs[framenum, corr_indices.data, :] = self.output_layer(h_nodes)
 
             # Update hidden and cell states
-            hidden_states[corr_index.data] = h_nodes
-            cell_states[corr_index.data] = c_nodes
+            hidden_states[corr_indices.data] = h_nodes
+            cell_states[corr_indices.data] = c_nodes
 
-        # Reshape outputs
-        outputs_return = Variable(torch.zeros(self.seq_length, num_persons, self.output_size))
-        if self.use_cuda:
-            outputs_return = outputs_return.cuda()
-        for framenum in range(self.seq_length):
-            for node in range(num_persons):
-                outputs_return[framenum, node, :] = outputs[framenum*num_persons + node, :]
-
-        return outputs_return, hidden_states, cell_states
+        return outputs, hidden_states, cell_states
 
     def loss(self, outputs, batch_item):
         input_data, grids, persons_list, _, lookup = batch_item
