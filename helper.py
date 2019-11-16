@@ -56,7 +56,7 @@ def getCoef(outputs):
     params:
     outputs : Output of the SRNN model
     '''
-    mux, muy, sx, sy, corr = outputs[:, :, 0], outputs[:, :, 1], outputs[:, :, 2], outputs[:, :, 3], outputs[:, :, 4]
+    mux, muy, sx, sy, corr = outputs[:, :, :, 0], outputs[:, :, :, 1], outputs[:, :, :, 2], outputs[:, :, :, 3], outputs[:, :, :, 4]
 
     sx = torch.exp(sx)
     sy = torch.exp(sy)
@@ -267,13 +267,14 @@ def Gaussian2DLikelihood(outputs, targets, nodesPresent, look_up):
     look_up : lookup table for determining which ped is in which array index
 
     '''
-    seq_length = outputs.size()[0]
+    seq_length = outputs.size(0)
+    batch_size = outputs.size(1)
     # Extract mean, std devs and correlation
     mux, muy, sx, sy, corr = getCoef(outputs)
 
     # Compute factors
-    normx = targets[:, :, 0] - mux
-    normy = targets[:, :, 1] - muy
+    normx = targets[:, :, :, 0] - mux
+    normy = targets[:, :, :, 1] - muy
     sxsy = sx * sy
 
     z = (normx/sx)**2 + (normy/sy)**2 - 2*((corr*normx*normy)/sxsy)
@@ -296,22 +297,16 @@ def Gaussian2DLikelihood(outputs, targets, nodesPresent, look_up):
     result = -torch.log(torch.clamp(result, min=epsilon))
 
     loss = 0
-    counter = 0
 
-    for framenum in range(seq_length):
+    _indices = [(framenum, b, look_up[b][x]) for b in range(batch_size) for framenum in range(seq_length) for x in nodesPresent[b][framenum]]
+    indices = list(zip(*_indices))
 
-        nodeIDs = nodesPresent[framenum]
-        nodeIDs = [int(nodeID) for nodeID in nodeIDs]
-
-        for nodeID in nodeIDs:
-            nodeID = look_up[nodeID]
-            loss = loss + result[framenum, nodeID]
-            counter = counter + 1
-
+    counter = len(indices[0])
     if counter != 0:
-        return loss / counter
-    else:
-        return loss
+        #loss = torch.sum(result[indices[0], indices[1], indices[2]]) / counter
+        loss = result[0,0,0]
+
+    return loss
 
 ##################### Data related methods ######################
 
@@ -698,7 +693,7 @@ def loadData(all_datasets, valid_percentage, max_val_size, batch_size, args):
     train_size = len(all_datasets) - valid_size
     train_dataset, valid_dataset = torch.utils.data.random_split(all_datasets, [train_size, valid_size])
     # Create the data loader objects
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, num_workers=2, pin_memory=False,
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, num_workers=0, pin_memory=True,
                               collate_fn=collate_fn)
     valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False, num_workers=0, pin_memory=False,
                               collate_fn=collate_fn)

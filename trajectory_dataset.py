@@ -11,7 +11,7 @@ dataset_dimensions = {'hotel.txt': [720, 576], 'eth.txt': [720, 576],
                                    'mot': [768, 576], 'overfit': [768, 576],
                                    'basketball': [400, 360], 'dataloader': [768, 578]}
 
-def convertToTensor(seq_data, persons_list):
+def convertToTensor(seq_data, persons_list, max_persons):
     """
     Function that converts seq_data into a tensor of size (seq_len, max_num_persons, 2) and a look-up table
     max_num_persons = maximum number of persons present in all of the frames of the sequence
@@ -27,7 +27,7 @@ def convertToTensor(seq_data, persons_list):
     lookup_table = dict(zip(unique_ids, range(0, len(unique_ids))))
 
     # Create the tensor seq_data
-    tensor_seq_data = np.zeros(shape=(len(seq_data), len(lookup_table), 2))
+    tensor_seq_data = np.zeros(shape=(len(seq_data), max_persons, 2))
 
     for ind, frame in enumerate(seq_data):
         corr_index = [lookup_table[x] for x in frame[:, 0]]

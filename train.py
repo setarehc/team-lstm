@@ -86,6 +86,7 @@ def init(seed, _config, _run):
 
 
 def train(args, _run):
+    torch.autograd.set_detect_anomaly(True)
     origin = (0, 0)
     reference_point = (0, 1)
 
@@ -154,40 +155,66 @@ def train(args, _run):
 
             # Check if last batch is shorter that batch_size
             # batch_size = len(batch) if (len(batch) < args.batch_size) else args.batch_size
-            if len(batch) < args.batch_size:
+            if batch[0].size(1) < args.batch_size:
                 continue
 
+            num_seen_sequences += batch[0].size(1)
+
+            batch = net.toCuda(batch)
+            net.zero_grad()
+            optimizer.zero_grad()
+
+            # Forward prop
+            outputs, _, _ = net(batch)
+
+            # Compute loss
+            loss = net.loss(outputs, batch)
+            loss_batch += loss.item()
+
+            # Free the memory
+            # *basketball*
+            torch.cuda.empty_cache()
+
+            # Compute gradients
+            loss.backward()
+
+            # Clip gradients
+            torch.nn.utils.clip_grad_norm_(net.parameters(), args.grad_clip)
+
+            # Update parameters
+            optimizer.step()
+
             # For each sequence
-            for batch_item in batch:
+            # for batch_item in batch:
                 
-                batch_item = net.toCuda(batch_item)
-                
-                # Zero out gradients
-                net.zero_grad()
-                optimizer.zero_grad()
+            #     batch_item = net.toCuda(batch_item)
 
-                # Forward prop
-                outputs, _, _ = net(batch_item)
+            #     # Zero out gradients
+            #     net.zero_grad()
+            #     optimizer.zero_grad()
 
-                # Increment number of seen sequences
-                num_seen_sequences += 1
+            #     # Forward prop
+            #     outputs, _, _ = net(batch_item)
 
-                # Compute loss
-                loss = net.loss(outputs, batch_item)
-                loss_batch += loss.item()
+            #     # Increment number of seen sequences
+            #     num_seen_sequences += 1
 
-                # Free the memory
-                # *basketball*
-                torch.cuda.empty_cache()
+            #     # Compute loss
+            #     loss = net.loss(outputs, batch_item)
+            #     loss_batch += loss.item()
 
-                # Compute gradients
-                loss.backward()
+            #     # Free the memory
+            #     # *basketball*
+            #     torch.cuda.empty_cache()
 
-                # Clip gradients
-                torch.nn.utils.clip_grad_norm_(net.parameters(), args.grad_clip)
+            #     # Compute gradients
+            #     loss.backward()
 
-                # Update parameters
-                optimizer.step()
+            #     # Clip gradients
+            #     torch.nn.utils.clip_grad_norm_(net.parameters(), args.grad_clip)
+
+            #     # Update parameters
+            #     optimizer.step()
 
             end = time.time()
             loss_epoch += loss_batch
