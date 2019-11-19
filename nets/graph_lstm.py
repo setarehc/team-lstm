@@ -6,6 +6,11 @@ from torch.autograd import Variable
 
 from .base import BaseModel
 
+import trajectory_dataset as td
+import helper
+
+import itertools
+
 class GraphModel(BaseModel):
 
     def __init__(self, args):
@@ -67,7 +72,7 @@ class GraphModel(BaseModel):
         #     graph_tensor[i, :] = torch.sum(self.g_module(torch.cat((X, hidden_states_current), 1)), 0)
         # return graph_tensor
 
-    def forward(self, input_data, grids, hidden_states, cell_states, PedsList, num_pedlist, look_up):
+    def forward(self, batch, hidden_states=None, cell_states=None):
         # TODO: Add social tensor calculation outside of model (in collate function)
 
         '''
@@ -84,6 +89,8 @@ class GraphModel(BaseModel):
         hidden_states
         cell_states
         '''
+
+        input_data, PedsList, num_pedlist, look_up = batch
 
         numNodes = len(look_up)
         outputs = Variable(torch.zeros(self.seq_length * numNodes, self.output_size))
@@ -146,3 +153,20 @@ class GraphModel(BaseModel):
                 outputs_return[framenum, node, :] = outputs[framenum*numNodes + node, :]
 
         return outputs_return, hidden_states, cell_states
+
+
+    @staticmethod
+    def collateFn(items, args):
+        batch=[]
+        for x_seq, num_peds_list_seq, peds_list_seq, folder_path in items:
+            # Get unique persons ids in the whole sequence
+            unique_ids = set(pid for peds_list in peds_list_seq for pid in peds_list)
+            max_num_persons = len(unique_ids)
+            # Dense vector (tensor) creation
+            x_seq, lookup_seq = td.convertToTensor(x_seq, peds_list_seq, max_num_persons)
+            # Vectorize trajectories in sequence
+            x_seq, _ = helper.vectorizeSeq(x_seq, peds_list_seq, lookup_seq)
+
+            batch.append([x_seq, peds_list_seq, num_peds_list_seq, lookup_seq])
+
+        return batch

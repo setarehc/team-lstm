@@ -6,7 +6,6 @@ from torch.autograd import Variable
 
 from .base import BaseModel
 
-
 import trajectory_dataset as td
 import helper
 import grid

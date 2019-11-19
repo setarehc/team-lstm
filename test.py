@@ -180,8 +180,8 @@ def test(sample_args, _run):
     save_dir = 'model'
 
     # Save directory
-    save_directory = os.path.join(f_prefix, save_dir, method_name, model_name)
-    #save_directory = 'models/103'
+    #save_directory = os.path.join(f_prefix, save_dir, method_name, model_name)
+    save_directory = 'models/119'
     #plot directory for plotting in the future
     plot_directory = os.path.join(f_prefix, 'plot/', method_name, model_name)
 
@@ -207,7 +207,8 @@ def test(sample_args, _run):
     test_loader, _ = loadData(all_datasets=datasets,
                               valid_percentage=0,
                               max_val_size=0,
-                              batch_size=sample_args.batch_size)
+                              batch_size=sample_args.batch_size,
+                              args=sample_args)
 
     num_batches = math.floor(len(test_loader.dataset) / sample_args.batch_size)
 
