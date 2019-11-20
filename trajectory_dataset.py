@@ -11,7 +11,7 @@ dataset_dimensions = {'hotel.txt': [720, 576], 'eth.txt': [720, 576],
                                    'mot': [768, 576], 'overfit': [768, 576],
                                    'basketball': [400, 360], 'dataloader': [768, 578]}
 
-def convertToTensor(seq_data, persons_list, max_persons):
+def convertToTensor(seq_data, persons_list, max_persons=None):
     """
     Function that converts seq_data into a tensor of size (seq_len, max_num_persons, 2) and a look-up table
     max_num_persons = maximum number of persons present in all of the frames of the sequence
@@ -22,6 +22,9 @@ def convertToTensor(seq_data, persons_list, max_persons):
     """
     # Get unique persons ids in the whole sequence
     unique_ids = pd.unique(list(itertools.chain.from_iterable(persons_list))).astype(int)
+
+    if max_persons is None:
+        max_persons = len(unique_ids)
 
     # Create a lookup table which maps person_id to tensor_seq_data index
     lookup_table = dict(zip(unique_ids, range(0, len(unique_ids))))
