@@ -33,10 +33,17 @@ def getMethodName(index):
         3 : 'VANILLALSTM'
     }.get(index, 'SOCIALLSTM')
 
-def getModel(index, arguments, infer = False):
+def getModel(args, arguments, infer = False):
     # return a model given index and arguments
+    index = args.method
+    model_type = args.model
     if index == 1:
-        return SocialModel(arguments)
+        if model_type == 'social':
+            return SocialModel(arguments)
+        elif model_type == 'graph':
+            return GraphModel(arguments)
+        else:
+            raise ValueError(f'Unexpected value for args.model ({args.model})')
     elif index == 2:
         return OLSTMModel(arguments, infer)
     elif index == 3:

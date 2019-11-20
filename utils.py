@@ -9,6 +9,7 @@ def commonCfg():
     model = 'social'
 
     input_size = 2
+    
     output_size = 5
 
     # RNN size parameter (dimension of the output/hidden state)
