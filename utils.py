@@ -9,7 +9,6 @@ def commonCfg():
     model = 'social'
 
     input_size = 2
-    
     output_size = 5
 
     # RNN size parameter (dimension of the output/hidden state)
@@ -59,7 +58,7 @@ def datasetCfg():
     pred_length = seq_length - obs_length; assert pred_length != None  # prediction length
     keep_every = 5; assert keep_every != None  # Keeps every keep_every entries of the input dataset (to recreate Kevin Murphy's work, needs be set to 5)
     orig_seq_len = 50; assert orig_seq_len != None  # Original dataset sequence length (ped_data = 20 and basketball_data = 50)
-    persons_to_keep = None  # Indicates players to keep in the dataset
+    persons_to_keep = None  # Indicates players to keep in the dataset (None meanse keep all players)
 
 @dataset_ingredient.named_config
 def basketball_total():
@@ -70,7 +69,7 @@ def basketball_total():
     obs_length = 6
     keep_every = 5
     orig_seq_len = 50
-    persons_to_keep = [1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0]  # Keep the ball and players 1-5
+    persons_to_keep = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]  # Keep the ball and players 1-5
 
 @dataset_ingredient.named_config
 def basketball():
@@ -92,7 +91,6 @@ def basketball_small():
     obs_length = 20
     keep_every = 1
     orig_seq_len = 50
-
 
 @dataset_ingredient.named_config
 def original():

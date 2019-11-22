@@ -139,3 +139,4 @@ class SocialModel(BaseModel):
                 outputs_return[framenum, node, :] = outputs[framenum*numNodes + node, :]
 
         return outputs_return, hidden_states, cell_states
+        
