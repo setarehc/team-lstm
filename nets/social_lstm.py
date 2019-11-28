@@ -75,9 +75,8 @@ class SocialModel(BaseModel):
         hidden_states
         cell_states
         '''
-
         numNodes = len(look_up)
-        outputs = Variable(torch.zeros(self.seq_length * numNodes, self.output_size))
+        outputs = torch.zeros(self.seq_length, numNodes, self.output_size)
         if self.use_cuda:            
             outputs = outputs.cuda()
 
@@ -90,7 +89,6 @@ class SocialModel(BaseModel):
             if len(nodeIDs) == 0:
                 # If no peds, then go to the next frame
                 continue
-
 
             # List of nodes
             list_of_nodes = [look_up[x] for x in nodeIDs]
@@ -108,7 +106,7 @@ class SocialModel(BaseModel):
             hidden_states_current = torch.index_select(hidden_states, 0, corr_index)
             cell_states_current = torch.index_select(cell_states, 0, corr_index)
 
-            # Compute the social tensor
+            # Compute the social tensor by performing social pooling
             social_tensor = self.getSocialTensor(grid_current, hidden_states_current)
             # Embed the social tensor
             tensor_embedded = self.dropout(self.relu(self.tensor_embedding_layer(social_tensor)))
@@ -122,21 +120,11 @@ class SocialModel(BaseModel):
             # One-step of the LSTM
             h_nodes, c_nodes = self.cell(concat_embedded, (hidden_states_current, cell_states_current))
 
-
             # Compute the output
-            outputs[framenum*numNodes + corr_index.data] = self.output_layer(h_nodes)
+            outputs[framenum, corr_index.data] = self.output_layer(h_nodes)
 
             # Update hidden and cell states
             hidden_states[corr_index.data] = h_nodes
             cell_states[corr_index.data] = c_nodes
 
-        # Reshape outputs
-        outputs_return = Variable(torch.zeros(self.seq_length, numNodes, self.output_size))
-        if self.use_cuda:
-            outputs_return = outputs_return.cuda()
-        for framenum in range(self.seq_length):
-            for node in range(numNodes):
-                outputs_return[framenum, node, :] = outputs[framenum*numNodes + node, :]
-
-        return outputs_return, hidden_states, cell_states
-        
+        return outputs, hidden_states, cell_states

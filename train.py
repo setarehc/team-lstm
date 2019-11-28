@@ -13,7 +13,7 @@ import copy
 import db
 import json
 
-ex = sacred.Experiment('train', ingredients=[utils.common_ingredient, utils.dataset_ingredient])
+ex = sacred.Experiment('train', ingredients=[utils.common_ingredient, utils.dataset_ingredient, utils.model_ingredient])
 db.init(ex)
 #ex.observers.append(MongoObserver.create(url='localhost:27017', db_name='MY_DB'))
 ex.captured_out_filter = lambda text: 'Output capturing turned off.'
@@ -63,6 +63,11 @@ def cfg():
     if dataset_filename is not None:
         os.makedirs(os.path.dirname(dataset_filename), exist_ok=True)
 
+@ex.named_config
+def debug(common):
+    os.makedirs('/tmp/team_lstm_out', exist_ok=True)
+    common['save_dir']='/tmp/team_lstm_out'
+
 
 def init(seed, _config, _run):
     # Next five lines are to call args.use_cuda instead of args.common.use_cuda
@@ -77,6 +82,13 @@ def init(seed, _config, _run):
     dataset_config = config['dataset']
     config.pop('dataset')
     for k, v in dataset_config.items():
+        assert k not in config
+        config[k] = v
+
+    # Next five lines are to call args.graph_type instead of args.model.graph_type
+    model_config = config['model']
+    config.pop('model')
+    for k, v in model_config.items():
         assert k not in config
         config[k] = v
 
@@ -224,33 +236,6 @@ def train(args, _run):
                 args.num_epochs * num_batches,
                 epoch,
                 loss_batch, end - start))
-
-            '''
-            if args.validate:
-                # Validate
-                if batch_idx % 5000 == 0:
-                    if len(valid_loader) > 0:
-                        #TEST
-                        t_dataset, _ = torch.utils.data.random_split(all_datasets, [1000, len(all_datasets)-1000])
-                        # Create the data loader objects
-                        t_loader = DataLoader(t_dataset, batch_size=args.batch_size, shuffle=False, num_workers=4,
-                                                  pin_memory=False,
-                                                  collate_fn=lambda x: x)
-                        t_loss = validLoss(net, t_loader, args)
-                        _run.log_scalar(metric_name='t.loss', value=t_loss, step=epoch + batch_idx / num_batches)
-                        ttt_loss = loss_epoch / num_seen_sequences
-                        _run.log_scalar(metric_name='ttt.loss', value=ttt_loss, step=epoch + batch_idx / num_batches)
-                        valid_loss = validLoss(net, valid_loader, args)
-                        total_error, final_error, norm_l2_dists = testHelper(net, valid_loader, args, args)
-                        total_error = total_error.item() if isinstance(total_error, torch.Tensor) else total_error
-                        final_error = final_error.item() if isinstance(final_error, torch.Tensor) else final_error
-                        _run.log_scalar(metric_name='valid.loss', value=valid_loss, step=epoch+batch_idx/num_batches)
-                        _run.log_scalar(metric_name='valid.total_error', value=total_error, step=epoch+batch_idx/num_batches)
-                        _run.log_scalar(metric_name='valid.final_error', value=final_error, step=epoch+batch_idx/num_batches)
-                        for i, l in enumerate(norm_l2_dists):
-                            error = norm_l2_dists[i].item() if isinstance(norm_l2_dists[i], torch.Tensor) else norm_l2_dists[i]
-                            _run.log_scalar(metric_name=f'valid.norm_l2_dist_{i}', value=error, step=epoch+batch_idx/num_batches)
-            '''
 
         loss_epoch /= num_seen_sequences
 

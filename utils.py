@@ -3,11 +3,10 @@ import os
 
 common_ingredient = Ingredient('common')
 dataset_ingredient = Ingredient('dataset')
+model_ingredient = Ingredient('model')
 
 @common_ingredient.config
 def commonCfg():
-    model = 'social'
-
     input_size = 2
     output_size = 5
 
@@ -37,14 +36,6 @@ def commonCfg():
     save_prefix = None
 
     validate = False
-
-    # Argument verification
-    assert model in ['social', 'graph']
-
-@common_ingredient.named_config
-def debug():
-    os.makedirs('/tmp/team_lstm_out', exist_ok=True)
-    save_dir='/tmp/team_lstm_out'
 
 
 @dataset_ingredient.config
@@ -91,6 +82,7 @@ def basketball_small():
     obs_length = 20
     keep_every = 1
     orig_seq_len = 50
+    #persons_to_keep = [1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0]
 
 @dataset_ingredient.named_config
 def original():
@@ -101,6 +93,23 @@ def original():
     obs_length = 8
     keep_every = 1
     orig_seq_len = 20
+
+@model_ingredient.config
+def modelCfg():
+    model = 'social'
+    graph_type = None
+    # Argument verification
+    assert model in ['social', 'graph']
+
+@model_ingredient.named_config
+def social():
+    model = 'social'
+    graph_type = None
+
+@model_ingredient.named_config
+def graph():
+    model = 'graph'
+    graph_type = 'FC'; assert graph_type in ['FC', 'EYE', 'TM', 'TMS', 'TMSB']
 
 
 class DotDict(dict):

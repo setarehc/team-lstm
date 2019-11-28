@@ -6,8 +6,6 @@ from torch.autograd import Variable
 
 from .base import BaseModel
 
-graph_structures = ['FC', 'EYE', 'TM', 'TMS', 'TMSB']
-
 class GraphModel(BaseModel):
 
     def __init__(self, args):
@@ -20,7 +18,7 @@ class GraphModel(BaseModel):
         
         # Store required sizes
         self.grid_size = args.grid_size
-
+        self.graph_type = args.graph_type
 
         # The LSTM cell
         self.cell = nn.LSTMCell(2*self.embedding_size, self.rnn_size)
@@ -49,9 +47,12 @@ class GraphModel(BaseModel):
         self.relu = nn.ReLU()
         self.dropout = nn.Dropout(args.dropout)
 
-
-    def get_indices_lists(self, adj_matrix):
-        # Initialize list
+    '''
+    def getIndicesLists(self, adj_matrix):
+        
+        #Returns indices lists that are used to pair up hidden states of connected persons
+        
+        # Initialize lists
         l1 = []
         l2 = []
         for i in range(len(adj_matrix)):
@@ -60,7 +61,7 @@ class GraphModel(BaseModel):
                     l1.append(i)
                     l2.append(j)       
         return l1, l2
-
+    '''
     
     def getGraphTensor(self, hidden_states_current, adj_matrix):
         numNodes = len(hidden_states_current)
@@ -70,38 +71,53 @@ class GraphModel(BaseModel):
             Y = hidden_states_current.repeat(numNodes, 1)
             ret = self.g_module(torch.cat((X, Y), 1))
             return torch.sum(ret.reshape(numNodes, numNodes, -1), 1)
+        
         else:
+            graph_tensor = torch.zeros(numNodes, self.rnn_size).to(hidden_states_current.device)
+            for idx in range(len(adj_matrix)):
+                l1 = [idx for item in adj_matrix[idx] if item==1]
+                l2 = [i for i, val in enumerate(adj_matrix[idx]) if val==1]
+                if len(l1) == 0:
+                    if len(l2) != 0:
+                        raise Exception('l1 and l2 are not representing the same adjacency list.')
+                    # TODO: Check if makes sense to leave it zero or to feed zero to the g_module and set graph_tensor to what that returns
+                    # X = torch.zeros(self.rnn_size)
+                    # Y = torch.zeros(self.rnn_size)
+                    # graph_tensor[idx, :] = self.g_module(torch.cat((X, Y), 1))
+                else:
+                    X = torch.cat([hidden_states_current[[x]] for x in l1])
+                    Y = torch.cat([hidden_states_current[[y]] for y in l2])
+                    graph_tensor[idx, :] = torch.sum(self.g_module(torch.cat((X, Y), 1)), 0)
+            return graph_tensor
+        '''      
             #import pdb; pdb.set_trace()
             graph_tensor = torch.zeros(numNodes, self.rnn_size).to(hidden_states_current.device)
-            l1, l2 = self.get_indices_lists(adj_matrix)
+            l1, l2 = self.getIndicesLists(adj_matrix)
             X = torch.cat([hidden_states_current[[x]] for x in l1])
             Y = torch.cat([hidden_states_current[[y]] for y in l2])
             ret = self.g_module(torch.cat((X, Y), 1))
             for idx, item in enumerate(l1):
                 graph_tensor[item] += ret[idx]
-            return graph_tensor
-        # graph_tensor = torch.zeros(numNodes, self.rnn_size).to(hidden_states_current.device)
-        # for i in range(numNodes):
-        #     X = hidden_states_current[i].repeat(numNodes, 1)
-        #     graph_tensor[i, :] = torch.sum(self.g_module(torch.cat((X, hidden_states_current), 1)), 0)
-        # return graph_tensor
+            for item, (first, last) in l1:
+                graph_tensor[item] = torch.sum(ret[first:last])
+            #return graph_tensor
+            opt1 = graph_tensor'''
 
-
-    def get_adj_matrix(self, gs, ped_ids):
+    def getAdjMatrix(self, ped_ids):
         num_nodes = len(ped_ids)
-        if gs == 'FC':
+        if self.graph_type == 'FC': # fully connected graph
             return torch.ones(num_nodes, num_nodes)
-        elif gs == 'EYE':
+        elif self.graph_type == 'EYE': # no one is connected to anyone
             return torch.eye(num_nodes)
         # The following structures only make sense for the basketball dataset
         # Assumption: persons_to_keep = [1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0]
-        elif gs == 'TM': # connects offensive players 
+        elif self.graph_type == 'TM': # connects offensive players (doesn't include the ball)
             adjm = torch.ones(num_nodes-1, num_nodes-1)
             adjm = torch.cat((torch.zeros(1, num_nodes-1), adjm))
             adjm = torch.cat((torch.zeros(num_nodes, 1), adjm), 1)
             return adjm
         # Assumption: persons_to_keep = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]
-        elif gs == 'TMS': # connects offensive players - connects defensive players
+        elif self.graph_type == 'TMS': # connects offensive players - connects defensive players
             num_team_players = int((num_nodes-1) / 2)
             tmp1 = torch.cat((torch.ones(num_team_players, num_team_players), torch.zeros(num_team_players, num_team_players)), 1)
             tmp2 = torch.cat((torch.zeros(num_team_players, num_team_players), torch.ones(num_team_players, num_team_players)), 1)
@@ -109,17 +125,20 @@ class GraphModel(BaseModel):
             adjm = torch.cat((torch.zeros(1, num_nodes-1), tmp3))
             adjm = torch.cat((torch.zeros(num_nodes, 1), adjm), 1)
             return adjm
-        elif gs == 'TMSB': # connects offensive players and the ball - connects defensive players 
-            num_team_players = int((num_nodes-1) / 2) # with 
-            tmp1 = torch.cat((torch.ones(num_team_players+1, num_team_players+1), torch.zeros(num_team_players+1, num_team_players)), 1)
-            tmp2 = torch.cat((torch.zeros(num_team_players, num_team_players+1), torch.ones(num_team_players, num_team_players)), 1)
+        elif self.graph_type == 'TMSB': # connects offensive players and the ball - connects defensive players and the ball
+            num_team_players = int((num_nodes-1) / 2)
+            tmp11 = torch.ones(num_team_players+1, num_team_players+1)
+            tmp12 = torch.cat((torch.ones(1, num_team_players), torch.zeros(num_team_players, num_team_players)))
+            tmp21 = torch.cat((torch.ones(num_team_players, 1), torch.zeros(num_team_players, num_team_players)), 1)
+            tmp22 = torch.ones(num_team_players, num_team_players)
+            tmp1 = torch.cat((tmp11, tmp12), 1)
+            tmp2 = torch.cat((tmp21, tmp22), 1)
             adjm = torch.cat((tmp1, tmp2))
             return adjm
  
 
     def forward(self, input_data, grids, hidden_states, cell_states, PedsList, num_pedlist, look_up):
         # TODO: Add social tensor calculation outside of model (in collate function)
-
         '''
         Forward pass for the model
         params:
@@ -134,12 +153,8 @@ class GraphModel(BaseModel):
         hidden_states
         cell_states
         '''
-
-        # Determine the graph structure:
-        graph_structure = graph_structures[3]
-
         numNodes = len(look_up)
-        outputs = Variable(torch.zeros(self.seq_length * numNodes, self.output_size))
+        outputs = torch.zeros(self.seq_length, numNodes, self.output_size)
         if self.use_cuda:            
             outputs = outputs.cuda()
 
@@ -149,7 +164,7 @@ class GraphModel(BaseModel):
             # Peds present in the current frame
             nodeIDs = [int(nodeID) for nodeID in PedsList[framenum]]
 
-            adj_matrix = self.get_adj_matrix(graph_structure, nodeIDs)
+            adj_matrix = self.getAdjMatrix(nodeIDs)
 
             if len(nodeIDs) == 0:
                 # If no peds, then go to the next frame
@@ -186,18 +201,10 @@ class GraphModel(BaseModel):
 
 
             # Compute the output
-            outputs[framenum*numNodes + corr_index.data] = self.output_layer(h_nodes)
+            outputs[framenum, corr_index.data] = self.output_layer(h_nodes)
 
             # Update hidden and cell states
             hidden_states[corr_index.data] = h_nodes
             cell_states[corr_index.data] = c_nodes
 
-        # Reshape outputs
-        outputs_return = Variable(torch.zeros(self.seq_length, numNodes, self.output_size))
-        if self.use_cuda:
-            outputs_return = outputs_return.cuda()
-        for framenum in range(self.seq_length):
-            for node in range(numNodes):
-                outputs_return[framenum, node, :] = outputs[framenum*numNodes + node, :]
-
-        return outputs_return, hidden_states, cell_states
+        return outputs, hidden_states, cell_states

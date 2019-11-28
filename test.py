@@ -12,7 +12,7 @@ from os import listdir
 from os.path import isfile, join
 import json
 
-ex = sacred.Experiment('test', ingredients=[utils.common_ingredient, utils.dataset_ingredient])
+ex = sacred.Experiment('test', ingredients=[utils.common_ingredient, utils.dataset_ingredient, utils.model_ingredient])
 #ex.observers.append(MongoObserver.create(url='localhost:27017', db_name='MY_DB'))
 
 
@@ -34,6 +34,11 @@ def cfg():
     dataset_filename = None  # If given, will load the dataset from this path instead of processing the files.
     if dataset_filename is not None:
         os.makedirs(os.path.dirname(dataset_filename), exist_ok=True)
+
+@ex.named_config
+def debug(common):
+    os.makedirs('/tmp/team_lstm_out', exist_ok=True)
+    common['save_dir']='/tmp/team_lstm_out'
 
 
 def init(seed, _config, _run):
