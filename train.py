@@ -132,6 +132,8 @@ def train(args, _run):
         net = SocialModel(args)
     elif args.model == 'graph':
         net = GraphModel(args)
+    elif args.model == 'vanilla':
+        net = VanillaModel(args)
     else:
         raise ValueError(f'Unexpected value for args.model ({args.model})')
     if args.use_cuda:

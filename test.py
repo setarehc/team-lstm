@@ -186,7 +186,7 @@ def test(sample_args, _run):
 
     # Save directory
     #save_directory = os.path.join(f_prefix, save_dir, method_name, model_name)
-    save_directory = 'models/119'
+    save_directory = 'models/139'
     #plot directory for plotting in the future
     plot_directory = os.path.join(f_prefix, 'plot/', method_name, model_name)
 

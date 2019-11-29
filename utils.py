@@ -99,7 +99,7 @@ def modelCfg():
     model = 'social'
     graph_type = None
     # Argument verification
-    assert model in ['social', 'graph']
+    assert model in ['social', 'graph', 'vanilla']
 
 @model_ingredient.named_config
 def social():
@@ -110,6 +110,11 @@ def social():
 def graph():
     model = 'graph'
     graph_type = 'FC'; assert graph_type in ['FC', 'EYE', 'TM', 'TMS', 'TMSB']
+
+@model_ingredient.named_config
+def vanilla():
+    model = 'vanilla'
+    graph_type = None
 
 
 class DotDict(dict):

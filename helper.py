@@ -9,6 +9,7 @@ import math
 
 from nets import SocialModel
 from nets import GraphModel
+from nets import VanillaModel
 from olstm_model import OLSTMModel
 from vlstm_model import VLSTMModel
 
@@ -36,12 +37,14 @@ def getMethodName(index):
 def getModel(args, arguments, infer = False):
     # return a model given index and arguments
     index = args.method
-    model_type = args.model
+    model_type = arguments.model
     if index == 1:
         if model_type == 'social':
             return SocialModel(arguments)
         elif model_type == 'graph':
             return GraphModel(arguments)
+        elif model_type == 'vanilla':
+            return VanillaModel(arguments)
         else:
             raise ValueError(f'Unexpected value for args.model ({args.model})')
     elif index == 2:
