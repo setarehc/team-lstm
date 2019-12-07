@@ -641,17 +641,14 @@ def getSize(tensor):
     '''
     return torch.norm(tensor)
 
-def loadData(dataset_path, seq_length, keep_every, valid_percentage, batch_size, max_val_size, persons_to_keep, filename=None):
+def buildDatasets(dataset_path, seq_length, keep_every, persons_to_keep, filename=None):
     '''
-    Dataset that creates and returns train/validation dataloaders of all datasets in dataset path
-    :param dataset_path: path of datasets
+    Function that builds all_datasets object of all files in dataset_path
+    :param dataset_path: path of datasets folder
     :param seq_length: original dataset sequence length (ped_data = 20 and basketball_data = 50)
     :param keep_every: # keeps every keep_every entries of the input dataset (to recreate Kevin Murphy's work, needs be set to 5)
-    :param valid_percentage: percentage of validation data
-    :param batch_size: dataset batch_size
-    :param max_val_size: maximum size of validation (=1000)
     :param persons_to_keep: binary list indicating persons to consider in dataset (for Kevin Murphy's setting = [1,1,1,1,1,1,0,0,0,0,0])
-    :return: train_loader and valid_loader
+    :return: all_datasets
     '''
     if filename is not None and os.path.exists(filename):
         print(f'Dataset filename is given and the object exists. Loading from the dataset object file {filename}')
@@ -665,6 +662,18 @@ def loadData(dataset_path, seq_length, keep_every, valid_percentage, batch_size,
         if filename is not None and not os.path.exists(filename):
             print(f'Saving the dataset object to file {filename}')
             torch.save(all_datasets, filename)
+    
+    return all_datasets
+
+def loadData(all_datasets, valid_percentage, batch_size, max_val_size):
+    '''
+    Function that creates and returns train/validation dataloaders of all_datasets object
+    
+    :param valid_percentage: percentage of validation data
+    :param batch_size: dataset batch_size
+    :param max_val_size: maximum size of validation (=1000)
+    :return: train_loader and valid_loader
+    '''
 
     valid_size = int(len(all_datasets) * valid_percentage / 100)
     if valid_size > max_val_size:

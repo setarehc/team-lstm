@@ -175,7 +175,7 @@ def test(sample_args, _run):
 
     # Save directory
     #save_directory = os.path.join(f_prefix, save_dir, method_name, model_name)
-    save_directory = 'models/154'
+    save_directory = 'models/152'
     #plot directory for plotting in the future
     plot_directory = os.path.join(f_prefix, 'plot/', method_name, model_name)
 
@@ -193,8 +193,17 @@ def test(sample_args, _run):
     # Debug: manually debug the code
     #path = 'data/basketball/small_test'
     path = sample_args.test_dataset_path
-    test_loader, _ = loadData(path, sample_args.orig_seq_len, sample_args.keep_every, 0, sample_args.batch_size, 0,
-                              sample_args.persons_to_keep, filename=sample_args.dataset_filename)
+
+    # Load data
+    datasets = buildDatasets(dataset_path=path,
+                             seq_length=sample_args.orig_seq_len,
+                             keep_every=sample_args.keep_every,
+                             persons_to_keep=sample_args.persons_to_keep, 
+                             filename=sample_args.dataset_filename)
+    test_loader, _ = loadData(all_datasets=datasets,
+                              valid_percentage=0,
+                              batch_size=sample_args.batch_size,
+                              max_val_size=0)
 
     num_batches = math.floor(len(test_loader.dataset) / sample_args.batch_size)
 
@@ -264,7 +273,7 @@ def sample(x_seq, Pedlist, args, net, true_x_seq, true_Pedlist, saved_args, dime
     '''
     # Number of peds in the sequence
     numx_seq = len(look_up)
-    
+
     with torch.no_grad():
         # Construct variables for hidden and cell states
         hidden_states = Variable(torch.zeros(numx_seq, net.args.rnn_size))

@@ -106,7 +106,16 @@ def train(args, _run):
     if os.path.isdir(save_directory):
         shutil.rmtree(save_directory)
 
-    train_loader, valid_loader = loadData(args.train_dataset_path, args.orig_seq_len, args.keep_every, args.valid_percentage, args.batch_size, args.max_val_size, args.persons_to_keep, filename=args.dataset_filename)
+    # Load data
+    datasets = buildDatasets(dataset_path=args.train_dataset_path,
+                             seq_length=args.orig_seq_len,
+                             keep_every=args.keep_every,
+                             persons_to_keep=args.persons_to_keep,
+                             filename=args.dataset_filename)
+    train_loader, valid_loader = loadData(all_datasets=datasets,
+                                          valid_percentage=args.valid_percentage,
+                                          batch_size=args.batch_size,
+                                          max_val_size=args.max_val_size)
     
     model_type = args.model
     method_name = getMethodName(model_type)
