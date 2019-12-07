@@ -28,9 +28,6 @@ def cfg():
     # part.Currently it is useless because we are using direct copy of observed part and no use of prediction.Test error will be 0.
     iteration = 1  # 'Number of iteration to create test file (smallest test error will be selected)'
 
-    # Method selection
-    method = 1  # 'Method of lstm will be used (1 = social lstm, 2 = obstacle lstm, 3 = vanilla lstm)'
-
     dataset_filename = None  # If given, will load the dataset from this path instead of processing the files.
     if dataset_filename is not None:
         os.makedirs(os.path.dirname(dataset_filename), exist_ok=True)
@@ -96,10 +93,7 @@ def testHelper(net, test_loader, sample_args, saved_args):
         orig_x_seq = x_seq.clone()
 
         # Grid mask calculation
-        if sample_args.method == 2:  # obstacle lstm
-            grid_seq = getSequenceGridMask(x_seq, dataset_data, peds_list_seq, saved_args.neighborhood_size,
-                                           saved_args.grid_size, saved_args.use_cuda, True)
-        elif sample_args.method == 1:  # social lstm
+        if saved_args.model == 'social':  # social lstm
             grid_seq = getSequenceGridMask(x_seq, dataset_data, peds_list_seq, saved_args.neighborhood_size,
                                            saved_args.grid_size, saved_args.use_cuda)
 
@@ -111,21 +105,21 @@ def testHelper(net, test_loader, sample_args, saved_args):
             x_seq = x_seq.cuda()
             first_values_dict = {k: v.cuda() for k, v in first_values_dict.items()}
             orig_x_seq = orig_x_seq.cuda()
-
+        
         # The sample function
-        if sample_args.method == 3:  # vanilla lstm
-            # Extract the observed part of the trajectories
-            obs_traj, obs_PedsList_seq = x_seq[:sample_args.obs_length], peds_list_seq[:sample_args.obs_length]
-            ret_x_seq = sample(obs_traj, obs_PedsList_seq, sample_args, net, x_seq, peds_list_seq, saved_args,
-                               dataset_data, test_loader, lookup_seq, num_peds_list_seq, sample_args.gru)
-
-        else:
+        if saved_args.model == 'social':
             # Extract the observed part of the trajectories
             obs_traj, obs_PedsList_seq, obs_grid = x_seq[:sample_args.obs_length], peds_list_seq[
                                                                                    :sample_args.obs_length], grid_seq[
                                                                                                              :sample_args.obs_length]
             ret_x_seq = sample(obs_traj, obs_PedsList_seq, sample_args, net, x_seq, peds_list_seq, saved_args,
                                dataset_data, test_loader, lookup_seq, num_peds_list_seq, sample_args.gru, obs_grid)
+        else:
+            # Extract the observed part of the trajectories
+            obs_traj, obs_PedsList_seq = x_seq[:sample_args.obs_length], peds_list_seq[:sample_args.obs_length]
+
+            ret_x_seq = sample(obs_traj, obs_PedsList_seq, sample_args, net, x_seq, peds_list_seq, saved_args,
+                               dataset_data, test_loader, lookup_seq, num_peds_list_seq, sample_args.gru)
 
         # revert the points back to original space
         ret_x_seq = revertSeq(ret_x_seq, peds_list_seq, lookup_seq, first_values_dict)
@@ -174,19 +168,14 @@ def test(sample_args, _run):
       #print("Directory creation script is running...")
       subprocess.call([f_prefix+'/make_directories.sh'])
 
-    method_name = getMethodName(sample_args.method)
+    model_type = sample_args.model['model']
+    method_name = getMethodName(model_type)
     model_name = "LSTM"
     save_tar_name = method_name+"_lstm_model_"
-    if sample_args.gru:
-        model_name = "GRU"
-        save_tar_name = method_name+"_gru_model_"
-
-    #print("Selected method name: ", method_name, " model name: ", model_name)
-    save_dir = 'model'
 
     # Save directory
     #save_directory = os.path.join(f_prefix, save_dir, method_name, model_name)
-    save_directory = 'models/139'
+    save_directory = 'models/154'
     #plot directory for plotting in the future
     plot_directory = os.path.join(f_prefix, 'plot/', method_name, model_name)
 
@@ -220,7 +209,7 @@ def test(sample_args, _run):
 
     for iteration in range(sample_args.iteration):
         # Initialize net
-        net = getModel(sample_args, saved_args, True)
+        net = getModel(saved_args, True)
 
         if sample_args.use_cuda:
             net = net.cuda()
@@ -235,7 +224,9 @@ def test(sample_args, _run):
             print('Loaded checkpoint at epoch', model_epoch)
         else:
             raise ValueError('Incorrect checkpoint: file does not exist')
-
+    
+    
+    #import pdb; pdb.set_trace()
     total_error, final_error, norm_l2_dists = testHelper(net, test_loader, sample_args, saved_args)
 
     if total_error < smallest_err:
@@ -273,7 +264,7 @@ def sample(x_seq, Pedlist, args, net, true_x_seq, true_Pedlist, saved_args, dime
     '''
     # Number of peds in the sequence
     numx_seq = len(look_up)
-
+    
     with torch.no_grad():
         # Construct variables for hidden and cell states
         hidden_states = Variable(torch.zeros(numx_seq, net.args.rnn_size))
@@ -294,15 +285,16 @@ def sample(x_seq, Pedlist, args, net, true_x_seq, true_Pedlist, saved_args, dime
 
         # For the observed part of the trajectory
         for tstep in range(args.obs_length - 1):
-            if grid is None:  # vanilla lstm
-                # Do a forward prop
-                out_obs, hidden_states, cell_states = net(x_seq[tstep].view(1, numx_seq, 2), hidden_states, cell_states,
-                                                          [Pedlist[tstep]], [num_pedlist[tstep]], look_up)
-            else:
+            if saved_args.model == 'social':
                 # Do a forward prop
                 out_obs, hidden_states, cell_states = net(x_seq[tstep].view(1, numx_seq, 2), [grid[tstep]],
                                                           hidden_states, cell_states, [Pedlist[tstep]],
                                                           [num_pedlist[tstep]], look_up)
+            else:
+                # Do a forward prop
+                out_obs, hidden_states, cell_states = net(x_seq[tstep].view(1, numx_seq, 2), hidden_states, cell_states,
+                                                          [Pedlist[tstep]], [num_pedlist[tstep]], look_up)
+                
             # loss_obs = Gaussian2DLikelihood(out_obs, x_seq[tstep+1].view(1, numx_seq, 2), [Pedlist[tstep+1]])
 
             # Extract the mean, std and corr of the bivariate Gaussian
@@ -317,7 +309,7 @@ def sample(x_seq, Pedlist, args, net, true_x_seq, true_Pedlist, saved_args, dime
         #ret_x_seq[:args.obs_length, :, :] = x_seq.clone()
 
         # Last seen grid
-        if grid is not None:  # no vanilla lstm
+        if saved_args.model == 'social':
             prev_grid = grid[-1].clone()
 
         # assign last position of observed data to temp
@@ -327,11 +319,7 @@ def sample(x_seq, Pedlist, args, net, true_x_seq, true_Pedlist, saved_args, dime
         # For the predicted part of the trajectory
         for tstep in range(args.obs_length - 1, args.pred_length + args.obs_length - 1):
             # Do a forward prop
-            if grid is None:  # vanilla lstm
-                outputs, hidden_states, cell_states = net(ret_x_seq[tstep].view(1, numx_seq, 2), hidden_states,
-                                                          cell_states, [true_Pedlist[tstep]], [num_pedlist[tstep]],
-                                                          look_up)
-            else:
+            if saved_args.model == 'social':
                 if tstep == args.obs_length - 1:
                     outputs, hidden_states, cell_states = net(x_seq[tstep].view(1, numx_seq, 2), [prev_grid],
                                                               hidden_states, cell_states, [true_Pedlist[tstep]],
@@ -339,7 +327,12 @@ def sample(x_seq, Pedlist, args, net, true_x_seq, true_Pedlist, saved_args, dime
                 else:
                     outputs, hidden_states, cell_states = net(ret_x_seq[tstep].view(1, numx_seq, 2), [prev_grid],
                                                           hidden_states, cell_states, [true_Pedlist[tstep]],
-                                                          [num_pedlist[tstep]], look_up)
+                                                          [num_pedlist[tstep]], look_up) 
+            else:
+                outputs, hidden_states, cell_states = net(ret_x_seq[tstep].view(1, numx_seq, 2), hidden_states,
+                                                          cell_states, [true_Pedlist[tstep]], [num_pedlist[tstep]],
+                                                          look_up)
+                
 
             # Extract the mean, std and corr of the bivariate Gaussian
             mux, muy, sx, sy, corr = getCoef(outputs)
@@ -363,15 +356,9 @@ def sample(x_seq, Pedlist, args, net, true_x_seq, true_Pedlist, saved_args, dime
             # Get their predicted positions
             current_x_seq = torch.index_select(ret_x_seq[tstep + 1], 0, list_of_x_seq)
 
-            if grid is not None:  # no vanilla lstm
+            if saved_args.model == 'social':
                 # Compute the new grid masks with the predicted positions
-                if args.method == 2:  # obstacle lstm
-                    prev_grid = getGridMask(current_x_seq.data.cpu(), dimensions, len(true_Pedlist[tstep + 1]),
-                                            saved_args.neighborhood_size, saved_args.grid_size, True)
-                elif args.method == 1:  # social lstm
-                    prev_grid = getGridMask(current_x_seq.data.cpu(), dimensions, len(true_Pedlist[tstep + 1]),
-                                            saved_args.neighborhood_size, saved_args.grid_size)
-
+                prev_grid = getGridMask(current_x_seq.data.cpu(), dimensions, len(true_Pedlist[tstep + 1]), saved_args.neighborhood_size, saved_args.grid_size)
                 prev_grid = Variable(torch.from_numpy(prev_grid).float())
                 if args.use_cuda:
                     prev_grid = prev_grid.cuda()

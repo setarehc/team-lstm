@@ -56,9 +56,6 @@ def cfg():
     valid_percentage = 10
     max_val_size = 1000   # If 10% of size of all the data > 1000, consider only a 1000
 
-    # Method selection
-    method = 1  # 'Method of lstm will be used (1 = social lstm, 2 = obstacle lstm, 3 = vanilla lstm)'
-
     dataset_filename = None  # If given, will load the dataset from this path instead of processing the files.
     if dataset_filename is not None:
         os.makedirs(os.path.dirname(dataset_filename), exist_ok=True)
@@ -110,13 +107,11 @@ def train(args, _run):
         shutil.rmtree(save_directory)
 
     train_loader, valid_loader = loadData(args.train_dataset_path, args.orig_seq_len, args.keep_every, args.valid_percentage, args.batch_size, args.max_val_size, args.persons_to_keep, filename=args.dataset_filename)
-
+    
+    model_type = args.model
+    method_name = getMethodName(model_type)
     model_name = "LSTM"
-    method_name = "SOCIALLSTM"
-    save_tar_name = method_name + "_lstm_model_"
-    if args.gru:
-        model_name = "GRU"
-        save_tar_name = method_name + "_gru_model_"
+    save_tar_name = method_name+"_lstm_model_"
 
     # Save the arguments int the config file
     os.makedirs(save_directory, exist_ok=True) #TODO: fix this!
@@ -126,7 +121,7 @@ def train(args, _run):
     # Path to store the checkpoint file (trained model)
     def checkpoint_path(x):
         return os.path.join(save_directory, save_tar_name + str(x) + '.tar')
-
+    #import pdb; pdb.set_trace()
     # model creation
     if args.model == 'social':
         net = SocialModel(args)
@@ -173,7 +168,8 @@ def train(args, _run):
                 dataset_data = dataset_dimensions[folder_name]
 
                 # Grid mask calculation and storage depending on grid parameter
-                grid_seq = getSequenceGridMask(x_seq, dataset_data, peds_list_seq, args.neighborhood_size,
+                if args.model == 'social':
+                    grid_seq = getSequenceGridMask(x_seq, dataset_data, peds_list_seq, args.neighborhood_size,
                                                args.grid_size, args.use_cuda)
 
                 # Replace relative positions with true positions in x_seq
@@ -198,8 +194,10 @@ def train(args, _run):
                 optimizer.zero_grad()
 
                 # Forward prop
-                outputs, _, _ = net(x_seq, grid_seq, hidden_states, cell_states, peds_list_seq, num_peds_list_seq,
-                                    lookup_seq)
+                if args.model == 'social':
+                    outputs, _, _ = net(x_seq, grid_seq, hidden_states, cell_states, peds_list_seq, num_peds_list_seq, lookup_seq)
+                else:
+                    outputs, _, _ = net(x_seq, hidden_states, cell_states, peds_list_seq, num_peds_list_seq, lookup_seq)
 
                 # Increment number of seen sequences
                 num_seen_sequences += 1

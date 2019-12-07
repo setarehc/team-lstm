@@ -82,7 +82,6 @@ class SocialModel(BaseModel):
 
         # For each frame in the sequence
         for framenum,frame in enumerate(input_data):
-
             # Peds present in the current frame
             nodeIDs = [int(nodeID) for nodeID in PedsList[framenum]]
 

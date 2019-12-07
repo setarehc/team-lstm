@@ -25,34 +25,26 @@ class WriteOnceDict(dict):
         if not key in self:
             super(WriteOnceDict, self).__setitem__(key, value)
 
-#(1 = social lstm, 2 = obstacle lstm, 3 = vanilla lstm)
-def getMethodName(index):
-    # return method name given index
+#('social' = social lstm, 'graph' == graph lstm, 'vanilla' = vanilla lstm)
+def getMethodName(model_name):
+    # return method name given model name
     return {
-        1 : 'SOCIALLSTM',
-        2 : 'OBSTACLELSTM',
-        3 : 'VANILLALSTM'
-    }.get(index, 'SOCIALLSTM')
+        'social' : 'SOCIALLSTM',
+        'graph' : 'GRAPHLSTM',
+        'vanilla' : 'VANILLALSTM'
+    }.get(model_name, 'SOCIALLSTM')
 
-def getModel(args, arguments, infer = False):
+def getModel(arguments, infer = False):
     # return a model given index and arguments
-    index = args.method
     model_type = arguments.model
-    if index == 1:
-        if model_type == 'social':
-            return SocialModel(arguments)
-        elif model_type == 'graph':
-            return GraphModel(arguments)
-        elif model_type == 'vanilla':
-            return VanillaModel(arguments)
-        else:
-            raise ValueError(f'Unexpected value for args.model ({args.model})')
-    elif index == 2:
-        return OLSTMModel(arguments, infer)
-    elif index == 3:
-        return VLSTMModel(arguments, infer)
-    else:
+    if model_type == 'social':
         return SocialModel(arguments)
+    elif model_type == 'graph':
+        return GraphModel(arguments)
+    elif model_type == 'vanilla':
+        return VanillaModel(arguments)
+    else:
+        raise ValueError(f'Unexpected value for args.model ({args.model})')
 
 def getCoef(outputs):
     '''

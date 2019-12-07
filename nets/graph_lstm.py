@@ -80,10 +80,6 @@ class GraphModel(BaseModel):
                 if len(l1) == 0:
                     if len(l2) != 0:
                         raise Exception('l1 and l2 are not representing the same adjacency list.')
-                    # TODO: Check if makes sense to leave it zero or to feed zero to the g_module and set graph_tensor to what that returns
-                    # X = torch.zeros(self.rnn_size)
-                    # Y = torch.zeros(self.rnn_size)
-                    # graph_tensor[idx, :] = self.g_module(torch.cat((X, Y), 1))
                 else:
                     X = torch.cat([hidden_states_current[[x]] for x in l1])
                     Y = torch.cat([hidden_states_current[[y]] for y in l2])
@@ -137,13 +133,12 @@ class GraphModel(BaseModel):
             return adjm
  
 
-    def forward(self, input_data, grids, hidden_states, cell_states, PedsList, num_pedlist, look_up):
+    def forward(self, input_data, hidden_states, cell_states, PedsList, num_pedlist, look_up):
         # TODO: Add social tensor calculation outside of model (in collate function)
         '''
         Forward pass for the model
         params:
         input_data: Input positions
-        grids: Grid masks
         hidden_states: Hidden states of the peds
         cell_states: Cell states of the peds
         PedsList: id of peds in each frame for this sequence
