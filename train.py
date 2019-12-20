@@ -115,7 +115,8 @@ def train(args, _run):
     train_loader, valid_loader = loadData(all_datasets=datasets,
                                           valid_percentage=args.valid_percentage,
                                           batch_size=args.batch_size,
-                                          max_val_size=args.max_val_size)
+                                          max_val_size=args.max_val_size,
+                                          args=args)
     
     model_type = args.model
     method_name = getMethodName(model_type)
@@ -130,7 +131,7 @@ def train(args, _run):
     # Path to store the checkpoint file (trained model)
     def checkpoint_path(x):
         return os.path.join(save_directory, save_tar_name + str(x) + '.tar')
-    #import pdb; pdb.set_trace()
+
     # model creation
     if args.model == 'social':
         net = SocialModel(args)
@@ -159,70 +160,30 @@ def train(args, _run):
 
             loss_batch = 0
 
-            # Check if last batch is shorter that batch_size
-            # batch_size = len(batch) if (len(batch) < args.batch_size) else args.batch_size
+            # Check if last batch is shorter that batch_size 
             if len(batch) < args.batch_size:
                 continue
 
             # For each sequence
-            for sequence in range(args.batch_size):
-                # Get the data corresponding to the current sequence
-                x_seq, num_peds_list_seq, peds_list_seq, folder_path = batch[sequence]
-
-                # Dense vector (tensor) creation
-                x_seq, lookup_seq = convertToTensor(x_seq, peds_list_seq)
-
-                # Get processing file name and then get dimensions of file
-                folder_name = getFolderName(folder_path, args.dataset)
-                dataset_data = dataset_dimensions[folder_name]
-
-                # Grid mask calculation and storage depending on grid parameter
-                if args.model == 'social':
-                    grid_seq = getSequenceGridMask(x_seq, dataset_data, peds_list_seq, args.neighborhood_size,
-                                               args.grid_size, args.use_cuda)
-
-                # Replace relative positions with true positions in x_seq
-                x_seq, _ = vectorizeSeq(x_seq, peds_list_seq, lookup_seq)
-
-                if args.use_cuda:
-                    x_seq = x_seq.cuda()
-
-                # Number of peds in this sequence
-                numNodes = len(lookup_seq)
-
-                hidden_states = Variable(torch.zeros(numNodes, args.rnn_size))
-                if args.use_cuda:
-                    hidden_states = hidden_states.cuda()
-
-                cell_states = Variable(torch.zeros(numNodes, args.rnn_size))
-                if args.use_cuda:
-                    cell_states = cell_states.cuda()
+            for batch_item in batch:
+                #import pdb; pdb.set_trace()
+                batch_item = net.toCuda(batch_item)
 
                 # Zero out gradients
                 net.zero_grad()
                 optimizer.zero_grad()
 
                 # Forward prop
-                if args.model == 'social':
-                    outputs, _, _ = net(x_seq, grid_seq, hidden_states, cell_states, peds_list_seq, num_peds_list_seq, lookup_seq)
-                else:
-                    outputs, _, _ = net(x_seq, hidden_states, cell_states, peds_list_seq, num_peds_list_seq, lookup_seq)
+                outputs, _, _ = net(batch_item)
 
                 # Increment number of seen sequences
                 num_seen_sequences += 1
 
-                # Debug
-
-
                 # Compute loss
-                loss = Gaussian2DLikelihood(outputs, x_seq, peds_list_seq, lookup_seq)
+                loss = net.computeLoss(outputs, batch_item)
                 loss_batch += loss.item()
 
                 # Free the memory
-                # *basketball*
-                del x_seq
-                del hidden_states
-                del cell_states
                 torch.cuda.empty_cache()
 
                 # Compute gradients
@@ -306,47 +267,17 @@ def validLoss(net, valid_loader, args):
                 continue
 
             # For each sequence
-            for sequence in range(args.batch_size):
-                # Get the data corresponding to the current sequence
-                x_seq, num_peds_list_seq, peds_list_seq, folder_path = batch[sequence]
-
-                # Dense vector (tensor) creation
-                x_seq, lookup_seq = convertToTensor(x_seq, peds_list_seq)
-
-                # Get processing file name and then get dimensions of file
-                folder_name = getFolderName(folder_path, args.dataset)
-                dataset_data = dataset_dimensions[folder_name]
-
-                # Grid mask calculation and storage depending on grid parameter
-                grid_seq = getSequenceGridMask(x_seq, dataset_data, peds_list_seq, args.neighborhood_size,
-                                               args.grid_size, args.use_cuda)
-
-                # Vectorize trajectories in sequence
-                x_seq, _ = vectorizeSeq(x_seq, peds_list_seq, lookup_seq)
-
-                if args.use_cuda:
-                    x_seq = x_seq.cuda()
-
-                # Number of peds in this sequence per frame
-                numNodes = len(lookup_seq)
-
-                hidden_states = Variable(torch.zeros(numNodes, args.rnn_size))
-                if args.use_cuda:
-                    hidden_states = hidden_states.cuda()
-
-                cell_states = Variable(torch.zeros(numNodes, args.rnn_size))
-                if args.use_cuda:
-                    cell_states = cell_states.cuda()
+            for batch_item in batch:
+                batch_item = net.toCuda(batch_item)
 
                 # Forward prop
-                outputs, _, _ = net(x_seq, grid_seq, hidden_states, cell_states, peds_list_seq, num_peds_list_seq,
-                                    lookup_seq)
+                outputs, _, _ = net(batch_item)
 
                 # Increment number of seen sequences
                 num_seen_sequences += 1
 
                 # Compute loss
-                loss = Gaussian2DLikelihood(outputs, x_seq, peds_list_seq, lookup_seq)
+                loss = net.computeLoss(outputs, batch_item)
                 loss_batch += loss.item()
 
             total_loss += loss_batch

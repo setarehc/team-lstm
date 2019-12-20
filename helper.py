@@ -178,12 +178,10 @@ def getFinalError(ret_nodes, nodes, assumedNodesPresent, trueNodesPresent, look_
     for ped_id in assumedNodesPresent[tstep]:
         ped_id = int(ped_id)
 
-
         if ped_id not in trueNodesPresent[tstep]:
             continue
 
         ped_idx = look_up[ped_id]
-
 
         pred_pos = ret_nodes[tstep, ped_idx, :]
         true_pos = nodes[tstep, ped_idx, :]
@@ -665,15 +663,24 @@ def buildDatasets(dataset_path, seq_length, keep_every, persons_to_keep, filenam
     
     return all_datasets
 
-def loadData(all_datasets, valid_percentage, batch_size, max_val_size):
+def loadData(all_datasets, valid_percentage, batch_size, max_val_size, args):
     '''
     Function that creates and returns train/validation dataloaders of all_datasets object
-    
+    :param all_datasets: concatination of all datasets in the target folder
     :param valid_percentage: percentage of validation data
     :param batch_size: dataset batch_size
     :param max_val_size: maximum size of validation (=1000)
     :return: train_loader and valid_loader
     '''
+    
+    if args.model == 'social':
+        collate_fn = lambda x: SocialModel.collateFn(x, args)
+    elif args.model == 'graph':
+        collate_fn = lambda x: GraphModel.collateFn(x, args)
+    elif args.model == 'vanilla':
+        collate_fn = lambda x: VanillaModel.collateFn(x, args)
+    else:
+        raise ValueError(f'Unexpected value for args.model ({args.model})')
 
     valid_size = int(len(all_datasets) * valid_percentage / 100)
     if valid_size > max_val_size:
@@ -682,9 +689,9 @@ def loadData(all_datasets, valid_percentage, batch_size, max_val_size):
     train_dataset, valid_dataset = torch.utils.data.random_split(all_datasets, [train_size, valid_size])
     # Create the data loader objects
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=False, num_workers=0, pin_memory=False,
-                              collate_fn=lambda x: x)
+                              collate_fn=collate_fn)
     valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False, num_workers=0, pin_memory=False,
-                              collate_fn=lambda x: x)
+                              collate_fn=collate_fn)
 
     # Debug: overfit to a single sequence
     #valid_loader = train_loader

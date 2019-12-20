@@ -6,6 +6,9 @@ from torch.autograd import Variable
 
 from .base import BaseModel
 
+import trajectory_dataset as td
+import helper
+
 class GraphModel(BaseModel):
 
     def __init__(self, args):
@@ -133,31 +136,40 @@ class GraphModel(BaseModel):
             return adjm
  
 
-    def forward(self, input_data, hidden_states, cell_states, PedsList, num_pedlist, look_up):
-        # TODO: Add social tensor calculation outside of model (in collate function)
+    def forward(self, batch_item, hidden_states=None, cell_states=None):
         '''
         Forward pass for the model
         params:
-        input_data: Input positions
-        hidden_states: Hidden states of the peds
-        cell_states: Cell states of the peds
-        PedsList: id of peds in each frame for this sequence
+        batch_item: A single batch of dataset
+        hidden_states: Hidden states of persons
+        cell_states: Cell states of persons
 
         returns:
         outputs_return: Outputs corresponding to bivariate Gaussian distributions
         hidden_states
         cell_states
         '''
-        numNodes = len(look_up)
-        outputs = torch.zeros(self.seq_length, numNodes, self.output_size)
-        if self.use_cuda:            
+        
+        input_data, persons_list, _, lookup, _, _ = batch_item
+
+        num_persons = len(lookup)
+
+        if hidden_states is None: 
+            hidden_states = torch.zeros(num_persons, self.rnn_size)
+        if cell_states is None: 
+            cell_states = torch.zeros(num_persons, self.rnn_size)
+        outputs = torch.zeros(self.seq_length, num_persons, self.output_size)
+
+        if self.use_cuda:      
+            hidden_states = hidden_states.cuda()
+            cell_states = cell_states.cuda()      
             outputs = outputs.cuda()
 
         # For each frame in the sequence
         for framenum,frame in enumerate(input_data):
 
             # Peds present in the current frame
-            nodeIDs = [int(nodeID) for nodeID in PedsList[framenum]]
+            nodeIDs = [int(node_id) for node_id in persons_list[framenum]]
 
             adj_matrix = self.getAdjMatrix(nodeIDs)
 
@@ -165,9 +177,8 @@ class GraphModel(BaseModel):
                 # If no peds, then go to the next frame
                 continue
 
-
             # List of nodes
-            list_of_nodes = [look_up[x] for x in nodeIDs]
+            list_of_nodes = [lookup[x] for x in nodeIDs]
 
             corr_index = Variable((torch.LongTensor(list_of_nodes))) 
             if self.use_cuda:            
@@ -203,3 +214,28 @@ class GraphModel(BaseModel):
             cell_states[corr_index.data] = c_nodes
 
         return outputs, hidden_states, cell_states
+
+    def computeLoss(self, outputs, batch_item):
+        input_data, persons_list, _, lookup, _, _ = batch_item
+        return helper.Gaussian2DLikelihood(outputs, input_data, persons_list, lookup)
+
+    def toCuda(self, batch_item):
+        #input_data, persons_list, _, lookup, _, _ = batch_item
+        if self.use_cuda:
+            batch_item[0] = batch_item[0].cuda()
+        return batch_item
+
+    @staticmethod
+    def collateFn(items, args):
+        batch=[]
+        for x_seq, num_persons_list_seq, persons_list_seq, folder_path in items:
+            # Get processing file name and then get dimensions of file
+            folder_name = helper.getFolderName(folder_path, args.dataset)
+            dataset_dim = td.dataset_dimensions[folder_name]
+            # Dense vector (tensor) creation
+            x_seq, lookup_seq = td.convertToTensor(x_seq, persons_list_seq)
+            # Vectorize trajectories in sequence
+            x_seq, init_values_dict = helper.vectorizeSeq(x_seq, persons_list_seq, lookup_seq)
+
+            batch.append([x_seq, persons_list_seq, num_persons_list_seq, lookup_seq, dataset_dim, init_values_dict])
+        return batch

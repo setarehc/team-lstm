@@ -8,28 +8,37 @@ from .base import BaseModel
 
 import trajectory_dataset as td
 import helper
-import grid
 
-class SocialModel(BaseModel):
+class VanillaModel(BaseModel):
 
-    def __init__(self, args):
+    def __init__(self, args, infer=False):
         '''
         Initializer function
         params:
         args: Training arguments
+        infer: Training or test time (true if test time)
         '''
-        super(SocialModel, self).__init__(args)
-        
-        # Store required sizes
-        self.grid_size = args.grid_size
+        super(VanillaModel, self).__init__(args)
 
+        self.infer = infer
+
+        if infer:
+            # Test time
+            self.seq_length = 1
+        else:
+            # Training time
+            self.seq_length = args.seq_length
+
+        # Store required sizes
+        self.rnn_size = args.rnn_size
+        self.embedding_size = args.embedding_size
+        self.input_size = args.input_size
+        self.output_size = args.output_size
+        self.maxNumPeds=args.maxNumPeds
+        self.seq_length=args.seq_length
 
         # The LSTM cell
-        self.cell = nn.LSTMCell(2*self.embedding_size, self.rnn_size)
-
-
-        # Linear layer to embed the social tensor
-        self.tensor_embedding_layer = nn.Linear(self.grid_size*self.grid_size*self.rnn_size, self.embedding_size)
+        self.cell = nn.LSTMCell(self.embedding_size, self.rnn_size)
 
         # Linear layer to map the hidden state of LSTM to output
         self.output_layer = nn.Linear(self.rnn_size, self.output_size)
@@ -37,47 +46,24 @@ class SocialModel(BaseModel):
         # ReLU and dropout unit
         self.relu = nn.ReLU()
         self.dropout = nn.Dropout(args.dropout)
-
-    def getSocialTensor(self, grid, hidden_states):
-        '''
-        Computes the social tensor for a given grid mask and hidden states of all peds
-        params:
-        grid : Grid masks
-        hidden_states : Hidden states of all peds
-        '''
-        # Number of peds
-        numNodes = grid.size()[0]
-
-        # Construct the variable
-        social_tensor = Variable(torch.zeros(numNodes, self.grid_size*self.grid_size, self.rnn_size))
-        if self.use_cuda:
-            social_tensor = social_tensor.cuda()
-        
-        # For each ped
-        for node in range(numNodes):
-            # Compute the social tensor
-            social_tensor[node] = torch.mm(torch.t(grid[node]), hidden_states)
-
-        # Reshape the social tensor
-        social_tensor = social_tensor.view(numNodes, self.grid_size*self.grid_size*self.rnn_size)
-        return social_tensor
             
     def forward(self, batch_item, hidden_states=None, cell_states=None):
         '''
         Forward pass for the model
         params:
-        batch_item: A single batch item of the dataset
-        hidden_states: Hidden states of persons
-        cell_states: Cell states of persons
+        input_data: Input positions
+        hidden_states: Hidden states of the peds
+        cell_states: Cell states of the peds
+        PedsList: id of peds in each frame for this sequence
 
         returns:
         outputs_return: Outputs corresponding to bivariate Gaussian distributions
         hidden_states
         cell_states
         '''
-        
-        input_data, grids, persons_list, _, lookup, _, _ = batch_item
-        
+        ##self, input_data, hidden_states, cell_states ,PedsList, num_pedlist, look_up
+        input_data, persons_list, _, lookup, _, _ = batch_item
+
         num_persons = len(lookup)
 
         if hidden_states is None: 
@@ -88,7 +74,7 @@ class SocialModel(BaseModel):
         
         if self.use_cuda:
             hidden_states = hidden_states.cuda()
-            cell_states = cell_states.cuda()
+            cell_states = cell_states.cuda()      
             outputs = outputs.cuda()
 
         # For each frame in the sequence
@@ -103,33 +89,24 @@ class SocialModel(BaseModel):
             # List of nodes
             list_of_nodes = [lookup[x] for x in nodeIDs]
 
-            corr_index = Variable((torch.LongTensor(list_of_nodes))) 
+            corr_index = Variable((torch.LongTensor(list_of_nodes)))
             if self.use_cuda:            
                 corr_index = corr_index.cuda()
 
             # Select the corresponding input positions
             nodes_current = frame[list_of_nodes,:]
-            # Get the corresponding grid masks
-            grid_current = grids[framenum]
 
             # Get the corresponding hidden and cell states
             hidden_states_current = torch.index_select(hidden_states, 0, corr_index)
             cell_states_current = torch.index_select(cell_states, 0, corr_index)
 
-            # Compute the social tensor by performing social pooling
-            social_tensor = self.getSocialTensor(grid_current, hidden_states_current)
-            # Embed the social tensor
-            tensor_embedded = self.dropout(self.relu(self.tensor_embedding_layer(social_tensor)))
 
             # Embed inputs
             input_embedded = self.dropout(self.relu(self.input_embedding_layer(nodes_current)))
-            
-            # Concat input
-            concat_embedded = torch.cat((input_embedded, tensor_embedded), 1)
 
             # One-step of the LSTM
-            h_nodes, c_nodes = self.cell(concat_embedded, (hidden_states_current, cell_states_current))
-
+            h_nodes, c_nodes = self.cell(input_embedded, (hidden_states_current, cell_states_current))
+            
             # Compute the output
             outputs[framenum, corr_index.data] = self.output_layer(h_nodes)
 
@@ -138,34 +115,28 @@ class SocialModel(BaseModel):
             cell_states[corr_index.data] = c_nodes
 
         return outputs, hidden_states, cell_states
-    
-    def computeLoss(self, outputs, batch_item):
-        input_data, _, persons_list, _, lookup, _, _ = batch_item
-        return helper.Gaussian2DLikelihood(outputs, input_data, persons_list, lookup)
 
+    def computeLoss(self, outputs, batch_item):
+        input_data, persons_list, _, lookup, _, _ = batch_item
+        return helper.Gaussian2DLikelihood(outputs, input_data, persons_list, lookup)
+    
     def toCuda(self, batch_item):
-        #input_data, grids, persons_list, _, lookup, _, _ = batch_item
+        #input_data, persons_list, _, lookup, _, _ = batch_item
         if self.use_cuda:
-            batch_item[0] = batch_item[0].cuda()        
-            for i in range(len(batch_item[1])):
-                batch_item[1][i] = batch_item[1][i].cuda()
+            batch_item[0] = batch_item[0].cuda()
         return batch_item
     
     @staticmethod
     def collateFn(items, args):
         batch=[]
         for x_seq, num_persons_list_seq, persons_list_seq, folder_path in items:
-            # Dense vector (tensor) creation
-            x_seq, lookup_seq = td.convertToTensor(x_seq, persons_list_seq)
             # Get processing file name and then get dimensions of file
             folder_name = helper.getFolderName(folder_path, args.dataset)
             dataset_dim = td.dataset_dimensions[folder_name]
-            # Grid mask calculation and storage depending on grid parameter
-            grid_seq = grid.getSequenceGridMask(x_seq, dataset_dim, persons_list_seq, args.neighborhood_size,
-                                           args.grid_size, args.use_cuda)
+            # Dense vector (tensor) creation
+            x_seq, lookup_seq = td.convertToTensor(x_seq, persons_list_seq)
             # Vectorize trajectories in sequence
             x_seq, init_values_dict = helper.vectorizeSeq(x_seq, persons_list_seq, lookup_seq)
 
-            batch.append([x_seq, grid_seq, persons_list_seq, num_persons_list_seq, lookup_seq, dataset_dim, init_values_dict])
-
+            batch.append([x_seq, persons_list_seq, num_persons_list_seq, lookup_seq, dataset_dim, init_values_dict])
         return batch
