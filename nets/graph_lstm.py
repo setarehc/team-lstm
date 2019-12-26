@@ -50,57 +50,13 @@ class GraphModel(BaseModel):
         self.relu = nn.ReLU()
         self.dropout = nn.Dropout(args.dropout)
 
-    '''
-    def getIndicesLists(self, adj_matrix):
-        
-        #Returns indices lists that are used to pair up hidden states of connected persons
-        
-        # Initialize lists
-        l1 = []
-        l2 = []
-        for i in range(len(adj_matrix)):
-            for j in range(len(adj_matrix)):
-                if adj_matrix[i][j] == 1:
-                    l1.append(i)
-                    l2.append(j)       
-        return l1, l2
-    '''
-    
     def getGraphTensor(self, hidden_states_current, adj_matrix):
         numNodes = len(hidden_states_current)
-        # If fully connected graph:
-        if  torch.all(adj_matrix == 1):
-            X = hidden_states_current.unsqueeze(1).repeat(1, numNodes, 1).reshape(numNodes*numNodes, -1)
-            Y = hidden_states_current.repeat(numNodes, 1)
-            ret = self.g_module(torch.cat((X, Y), 1))
-            return torch.sum(ret.reshape(numNodes, numNodes, -1), 1)
-        
-        else:
-            graph_tensor = torch.zeros(numNodes, self.rnn_size).to(hidden_states_current.device)
-            for idx in range(len(adj_matrix)):
-                l1 = [idx for item in adj_matrix[idx] if item==1]
-                l2 = [i for i, val in enumerate(adj_matrix[idx]) if val==1]
-                if len(l1) == 0:
-                    if len(l2) != 0:
-                        raise Exception('l1 and l2 are not representing the same adjacency list.')
-                else:
-                    X = torch.cat([hidden_states_current[[x]] for x in l1])
-                    Y = torch.cat([hidden_states_current[[y]] for y in l2])
-                    graph_tensor[idx, :] = torch.sum(self.g_module(torch.cat((X, Y), 1)), 0)
-            return graph_tensor
-        '''      
-            #import pdb; pdb.set_trace()
-            graph_tensor = torch.zeros(numNodes, self.rnn_size).to(hidden_states_current.device)
-            l1, l2 = self.getIndicesLists(adj_matrix)
-            X = torch.cat([hidden_states_current[[x]] for x in l1])
-            Y = torch.cat([hidden_states_current[[y]] for y in l2])
-            ret = self.g_module(torch.cat((X, Y), 1))
-            for idx, item in enumerate(l1):
-                graph_tensor[item] += ret[idx]
-            for item, (first, last) in l1:
-                graph_tensor[item] = torch.sum(ret[first:last])
-            #return graph_tensor
-            opt1 = graph_tensor'''
+        X = hidden_states_current.unsqueeze(1).repeat(1, numNodes, 1).reshape(numNodes*numNodes, -1)
+        Y = hidden_states_current.repeat(numNodes, 1)
+        G = self.g_module(torch.cat((X, Y), 1)).reshape(numNodes, numNodes, -1)
+        res = torch.matmul(adj_matrix.float().unsqueeze(1), G).squeeze(1)
+        return res
 
     def getAdjMatrix(self, ped_ids):
         num_nodes = len(ped_ids)
@@ -171,7 +127,7 @@ class GraphModel(BaseModel):
             # Peds present in the current frame
             nodeIDs = [int(node_id) for node_id in persons_list[framenum]]
 
-            adj_matrix = self.getAdjMatrix(nodeIDs)
+            adj_matrix = self.getAdjMatrix(nodeIDs).to(hidden_states.device)
 
             if len(nodeIDs) == 0:
                 # If no peds, then go to the next frame
