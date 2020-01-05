@@ -703,3 +703,9 @@ def getFolderName(folder_path, dataset):
     if dataset in ['basketball', 'basketball_small', 'basketball_total']:
         return folder_path.split('/')[-3]
     return folder_path.split('/')[-1]
+
+def get_latets_file(list_of_files):
+    #return max(list_of_saved_models, key=os.path.getctime)
+    helper_list = [(int(p.split('.')[0].split('_')[-1]), i) for i, p in enumerate(list_of_files)]
+    latest_file_index = sorted(helper_list, key=lambda x: x[0])[-1][1]
+    return list_of_files[latest_file_index]

@@ -12,6 +12,7 @@ from test import testHelper
 import copy
 import db
 import json
+import glob
 
 ex = sacred.Experiment('train', ingredients=[utils.common_ingredient, utils.dataset_ingredient, utils.model_ingredient])
 db.init(ex)
@@ -39,7 +40,6 @@ def cfg():
     # Decay rate for the learning rate parameter
     decay_rate = 0.95  # decay rate for rmsprop
 
-    # Dropout not implemented.
     # Dropout probability parameter
     dropout = 0.5  # dropout probability
 
@@ -49,7 +49,7 @@ def cfg():
     # Lambda regularization parameter (L2)
     lambda_param = 0.0005  # L2 regularization parameter
 
-    # store grids in epoch 0 and use further.2 times faster -> Intensive memory use around 12 GB
+    # Store grids in epoch 0 and use further.2 times faster -> Intensive memory use around 12 GB
     grid = True  # Whether store grids and use further epoch
 
     # Percentage of validation data out of all the data
@@ -59,6 +59,9 @@ def cfg():
     dataset_filename = None  # If given, will load the dataset from this path instead of processing the files.
     if dataset_filename is not None:
         os.makedirs(os.path.dirname(dataset_filename), exist_ok=True)
+
+    # If we need to continue training a pre-trained model, load it from saved_model_dir
+    saved_model_dir = None 
 
 @ex.named_config
 def debug(common):
@@ -99,12 +102,15 @@ def train(args, _run):
     reference_point = (0, 1)
 
     # Set directory to save the trained model
-    inner_dir = args.save_prefix
-    if inner_dir is None:
-        inner_dir = 'tmp' if _run._id is None else str(_run._id)
-    save_directory = os.path.join(args.save_dir, inner_dir)
-    if os.path.isdir(save_directory):
-        shutil.rmtree(save_directory)
+    if args.saved_model_dir is not None:
+            save_directory = args.saved_model_dir
+    else:
+        inner_dir = args.save_prefix
+        if inner_dir is None:
+            inner_dir = 'tmp' if _run._id is None else str(_run._id)
+        save_directory = os.path.join(args.save_dir, inner_dir)
+        if os.path.isdir(save_directory):
+            shutil.rmtree(save_directory)
 
     # Load data
     datasets = buildDatasets(dataset_path=args.train_dataset_path,
@@ -112,6 +118,7 @@ def train(args, _run):
                              keep_every=args.keep_every,
                              persons_to_keep=args.persons_to_keep,
                              filename=args.dataset_filename)
+
     train_loader, valid_loader = loadData(all_datasets=datasets,
                                           valid_percentage=args.valid_percentage,
                                           batch_size=args.batch_size,
@@ -132,24 +139,45 @@ def train(args, _run):
     def checkpoint_path(x):
         return os.path.join(save_directory, save_tar_name + str(x) + '.tar')
 
-    # model creation
-    if args.model == 'social':
-        net = SocialModel(args)
-    elif args.model == 'graph':
-        net = GraphModel(args)
-    elif args.model == 'vanilla':
-        net = VanillaModel(args)
+    #import pdb; pdb.set_trace()
+    # If we should continue training a pre-trained model
+    if args.saved_model_dir is not None:
+        # Load the config file of model:
+        with open(os.path.join(save_directory, 'config.json'), 'rb') as f:
+            saved_args = DotDict(json.load(f))
+        # Build empty net with the above config:
+        net = getModel(saved_args, True)
+        if args.use_cuda:
+            net = net.cuda()
+        # Get the last trained epoch to continue training:
+        list_of_saved_models = glob.glob(os.path.join(args.saved_model_dir, '*.tar'))
+        latest_model = get_latets_file(list_of_saved_models)
+        checkpoint = torch.load(latest_model)
+        init_epoch = checkpoint['epoch'] + 1
+        net.load_state_dict(checkpoint['state_dict'])
+        # Build empty optimizer:
+        optimizer = torch.optim.Adagrad(net.parameters(), weight_decay=args.lambda_param)
+        # Load the state dictionary of optimizer:
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     else:
-        raise ValueError(f'Unexpected value for args.model ({args.model})')
-    if args.use_cuda:
-        net = net.cuda()
-
-    optimizer = torch.optim.Adagrad(net.parameters(), weight_decay=args.lambda_param)
+        # model creation
+        if args.model == 'social':
+            net = SocialModel(args)
+        elif args.model == 'graph':
+            net = GraphModel(args)
+        elif args.model == 'vanilla':
+            net = VanillaModel(args)
+        else:
+            raise ValueError(f'Unexpected value for args.model ({args.model})')
+        if args.use_cuda:
+            net = net.cuda()
+        init_epoch = 0
+        optimizer = torch.optim.Adagrad(net.parameters(), weight_decay=args.lambda_param)
 
     num_batch = 0
 
     # Training
-    for epoch in range(args.num_epochs):
+    for epoch in range(init_epoch, args.num_epochs+init_epoch):
         print('****************Training epoch beginning******************')
         loss_epoch = 0
         num_seen_sequences = 0
