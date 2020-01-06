@@ -28,9 +28,13 @@ def cfg():
     # part.Currently it is useless because we are using direct copy of observed part and no use of prediction.Test error will be 0.
     iteration = 1  # 'Number of iteration to create test file (smallest test error will be selected)'
 
-    dataset_filename = None  # If given, will load the dataset from this path instead of processing the files.
+    dataset_filename = None  # If given, loads dataset from this path instead of processing the files.
     if dataset_filename is not None:
         os.makedirs(os.path.dirname(dataset_filename), exist_ok=True)
+
+    saved_model_dir = None # If given, loads trained model of this path.
+
+    results_dir = None # If given, saves results in this path.
 
 @ex.named_config
 def debug(common):
@@ -58,7 +62,7 @@ def init(seed, _config, _run):
     return args
 
 
-def testHelper(net, test_loader, sample_args, saved_args):
+def testHelper(net, test_loader, sample_args, saved_args, result_directory):
 
     num_batches = math.floor(len(test_loader.dataset) / sample_args.batch_size)
 
@@ -112,8 +116,18 @@ def testHelper(net, test_loader, sample_args, saved_args):
                                                         peds_list[:sample_args.obs_length],
                                                         peds_list[:sample_args.obs_length],
                                                     sample_args.use_cuda, lookup)
-
-        end = time.time()
+            
+            # Save predicted results
+            #import pdb; pdb.set_trace()
+            res = {'pred_pos': sampled_x_seq[:sample_args.obs_length].tolist(),
+                   'gt_pos': orig_x_seq[:sample_args.obs_length].tolist(),
+                   'persons': peds_list[:sample_args.obs_length],
+                   'lookup': {int(k): v for k,v in lookup.items()}}
+            os.makedirs(os.path.join(result_directory, str(sample_args.epoch)), exist_ok=True)
+            with open(os.path.join(result_directory, str(sample_args.epoch), 'config.json'), "w") as fp:
+                json.dump(res, fp)
+            
+            end = time.time()
 
         print(' Processed trajectory number : ', batch_idx + 1, 'out of', num_batches,
               'trajectories in time', end - start)
@@ -123,36 +137,40 @@ def testHelper(net, test_loader, sample_args, saved_args):
 
 def test(sample_args, _run):
 
-    # For drive run
-    prefix = ''
-    f_prefix = '.'
-    if sample_args.drive is True:
-        prefix='drive/semester_project/social_lstm_final/'
-        f_prefix = 'drive/semester_project/social_lstm_final'
+    # For drive run; running on lab-machine
+    if sample_args.results_dir is not None:
+        f_prefix = sample_args.results_dir
+    else:
+        f_prefix = '.'
 
     # Run sh file for folder creation
     if not os.path.isdir("log/"):
       #print("Directory creation script is running...")
       subprocess.call([f_prefix+'/make_directories.sh'])
 
-    model_type = sample_args.model['model']
-    method_name = getMethodName(model_type)
-    model_name = "LSTM"
-    save_tar_name = method_name+"_lstm_model_"
-
     # Save directory
-    #save_directory = os.path.join(f_prefix, save_dir, method_name, model_name)
-    save_directory = 'models/167'
-    #plot directory for plotting in the future
-    plot_directory = os.path.join(f_prefix, 'plot/', method_name, model_name)
-
-    result_directory = os.path.join(f_prefix, 'result/', method_name)
-    plot_test_file_directory = 'test'
-
+    if sample_args.saved_model_dir is not None:
+        save_directory = sample_args.saved_model_dir
+    else:
+        #save_directory = os.path.join(f_prefix, save_dir, method_name, model_name)
+        save_directory = 'models/202'
 
     # Define the path for the config file for saved args
     with open(os.path.join(save_directory, 'config.json'), 'rb') as f:
         saved_args = DotDict(json.load(f))
+
+    # Set model names to load
+    model_type = saved_args.model
+    method_name = getMethodName(model_type)
+    model_name = "LSTM"
+    save_tar_name = method_name+"_lstm_model_"
+
+    # Extract experiment number
+    exp_num = save_directory.split('/')[-1]
+
+    # Set results/errors directories for plotting in the future
+    result_directory = os.path.join(f_prefix, 'results/', exp_num)#, str(sample_args.epoch))
+    error_directory = os.path.join(f_prefix, 'errors/', exp_num)#, str(sample_args.epoch))
 
     seq_len = sample_args.seq_length
 
@@ -177,11 +195,8 @@ def test(sample_args, _run):
                               args=saved_args)
 
     num_batches = math.floor(len(test_loader.dataset) / sample_args.batch_size)
-
     smallest_err = 100000
     smallest_err_iter_num = -1
-    origin = (0, 0)
-    reference_point = (0, 1)
 
     submission_store = []  # store submission data points (txt)
     result_store = []  # store points for plotting
@@ -204,9 +219,16 @@ def test(sample_args, _run):
             print('Loaded checkpoint at epoch', model_epoch)
         else:
             raise ValueError('Incorrect checkpoint: file does not exist')
-    
-    
-    total_error, final_error, norm_l2_dists = testHelper(net, test_loader, sample_args, saved_args)
+
+    total_error, final_error, norm_l2_dists = testHelper(net, test_loader, sample_args, saved_args, result_directory)
+
+    # Save errors
+    res = {'total_error': total_error.item(),
+           'final_error': final_error.item(),
+           'norm_l2_dists': norm_l2_dists.tolist()}
+    os.makedirs(os.path.join(error_directory, str(sample_args.epoch)), exist_ok=True)
+    with open(os.path.join(error_directory, str(sample_args.epoch), 'config.json'), "w") as fp:
+        json.dump(res, fp)
 
     if total_error < smallest_err:
         # print("**********************************************************")
@@ -325,7 +347,6 @@ def sample(batch_item, net, args, saved_args):
                     prev_grid = prev_grid.cuda()
 
         # Revert the points back to the original space
-        #import pdb; pdb.set_trace()
         #sampled_x_seq = revertSeq(sampled_x_seq.data.cpu(), peds_list, lookup, init_values_dict)
         return sampled_x_seq
 
