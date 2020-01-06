@@ -223,9 +223,9 @@ def test(sample_args, _run):
     total_error, final_error, norm_l2_dists = testHelper(net, test_loader, sample_args, saved_args, result_directory)
 
     # Save errors
-    res = {'total_error': total_error.item(),
-           'final_error': final_error.item(),
-           'norm_l2_dists': norm_l2_dists.tolist()}
+    res = {'total_error': total_error.item()/num_batches,
+           'final_error': final_error.item()/num_batches,
+           'norm_l2_dists': [i/num_batches for i in norm_l2_dists.tolist()]}
     os.makedirs(os.path.join(error_directory, str(sample_args.epoch)), exist_ok=True)
     with open(os.path.join(error_directory, str(sample_args.epoch), 'config.json'), "w") as fp:
         json.dump(res, fp)
