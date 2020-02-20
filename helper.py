@@ -44,7 +44,7 @@ def getModel(arguments, infer = False):
     elif model_type == 'vanilla':
         return VanillaModel(arguments)
     else:
-        raise ValueError(f'Unexpected value for args.model ({args.model})')
+        raise ValueError(f'Unexpected value for args.model ({arguments.model})')
 
 def getCoef(outputs):
     '''
