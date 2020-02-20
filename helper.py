@@ -35,6 +35,7 @@ def getMethodName(model_name):
     }.get(model_name, 'SOCIALLSTM')
 
 def getModel(arguments, infer = False):
+    #import pdb; pdb.set_trace()
     # return a model given index and arguments
     model_type = arguments.model
     if model_type == 'social':
