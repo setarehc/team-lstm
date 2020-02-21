@@ -119,13 +119,14 @@ def testHelper(net, test_loader, sample_args, saved_args, result_directory):
             
             # Save predicted results
             #import pdb; pdb.set_trace()
-            res = {'pred_pos': sampled_x_seq[:sample_args.obs_length].tolist(),
-                   'gt_pos': orig_x_seq[:sample_args.obs_length].tolist(),
-                   'persons': peds_list[:sample_args.obs_length],
-                   'lookup': {int(k): v for k,v in lookup.items()}}
-            os.makedirs(os.path.join(result_directory, str(sample_args.epoch)), exist_ok=True)
-            with open(os.path.join(result_directory, str(sample_args.epoch), 'config.json'), "w") as fp:
-                json.dump(res, fp)
+            if result_directory is not None:
+                res = {'pred_pos': sampled_x_seq[:sample_args.obs_length].tolist(),
+                    'gt_pos': orig_x_seq[:sample_args.obs_length].tolist(),
+                    'persons': peds_list[:sample_args.obs_length],
+                    'lookup': {int(k): v for k,v in lookup.items()}}
+                os.makedirs(os.path.join(result_directory, str(sample_args.epoch)), exist_ok=True)
+                with open(os.path.join(result_directory, str(sample_args.epoch), 'config.json'), "w") as fp:
+                    json.dump(res, fp)
             
             end = time.time()
 
@@ -153,7 +154,7 @@ def test(sample_args, _run):
         save_directory = sample_args.saved_model_dir
     else:
         #save_directory = os.path.join(f_prefix, save_dir, method_name, model_name)
-        save_directory = 'models/202'
+        save_directory = 'models/243'
 
     # Define the path for the config file for saved args
     with open(os.path.join(save_directory, 'config.json'), 'rb') as f:
@@ -209,6 +210,7 @@ def test(sample_args, _run):
         if sample_args.use_cuda:
             net = net.cuda()
 
+        #import pdb; pdb.set_trace()
         # Get the checkpoint path
         checkpoint_path = os.path.join(save_directory, save_tar_name+str(sample_args.epoch)+'.tar')
         if os.path.isfile(checkpoint_path):

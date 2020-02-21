@@ -209,22 +209,19 @@ def train(args, _run):
 
                 # Compute loss
                 loss = net.computeLoss(outputs, batch_item)
-                loss_batch += loss.item()
+                loss_batch += loss / len(batch)
 
-                # Free the memory
-                torch.cuda.empty_cache()
+            # Compute gradients
+            loss_batch.backward()
 
-                # Compute gradients
-                loss.backward()
+            # Clip gradients
+            torch.nn.utils.clip_grad_norm_(net.parameters(), args.grad_clip)
 
-                # Clip gradients
-                torch.nn.utils.clip_grad_norm_(net.parameters(), args.grad_clip)
-
-                # Update parameters
-                optimizer.step()
+            # Update parameters
+            optimizer.step()
 
             end = time.time()
-            loss_epoch += loss_batch
+            loss_epoch += loss_batch.item()
             num_batch += 1
 
             num_batches = math.floor(len(train_loader.dataset) / args.batch_size)
@@ -233,9 +230,9 @@ def train(args, _run):
                 epoch * num_batches + batch_idx,
                 args.num_epochs * num_batches,
                 epoch,
-                loss_batch, end - start))
+                loss_batch.item(), end - start))
 
-        loss_epoch /= num_seen_sequences
+        loss_epoch /= num_batches
 
         # Log loss values
         #log_file_curve.write("Training epoch: " + str(epoch) + " loss: " + str(loss_epoch) + '\n')
@@ -253,7 +250,7 @@ def train(args, _run):
                 _run.log_scalar(metric_name='valid.sx', value=torch.mean(sx).item(), step=epoch)
                 _run.log_scalar(metric_name='valid.sy', value=torch.mean(sy).item(), step=epoch)
                 valid_loss = validLoss(net, valid_loader, args)
-                total_error, final_error, norm_l2_dists = testHelper(net, valid_loader, args, args)
+                total_error, final_error, norm_l2_dists = testHelper(net, valid_loader, args, args, None)
                 total_error = total_error.item() if isinstance(total_error, torch.Tensor) else total_error
                 final_error = final_error.item() if isinstance(final_error, torch.Tensor) else final_error
                 _run.log_scalar(metric_name='valid.loss', value=valid_loss, step=epoch)

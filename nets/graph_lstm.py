@@ -51,11 +51,12 @@ class GraphModel(BaseModel):
         self.dropout = nn.Dropout(args.dropout)
 
     def getGraphTensor(self, hidden_states_current, adj_matrix):
-        numNodes = len(hidden_states_current)
-        X = hidden_states_current.unsqueeze(1).repeat(1, numNodes, 1).reshape(numNodes*numNodes, -1)
-        Y = hidden_states_current.repeat(numNodes, 1)
-        G = self.g_module(torch.cat((X, Y), 1)).reshape(numNodes, numNodes, -1)
-        res = torch.matmul(adj_matrix.float().unsqueeze(1), G).squeeze(1)
+        num_nodes = len(hidden_states_current)
+        X = hidden_states_current.unsqueeze(1).expand(hidden_states_current.size()[:1] + torch.Size([num_nodes]) + hidden_states_current.size()[1:]).reshape(num_nodes*num_nodes, -1)
+        Y = hidden_states_current.unsqueeze(0).expand(torch.Size([num_nodes]) + hidden_states_current.size()).reshape(num_nodes*num_nodes, -1)
+        G = self.g_module(torch.cat((X, Y), 1)).reshape(num_nodes, num_nodes, -1)
+        G[adj_matrix == 0] = 0
+        res = torch.sum(G, dim=0)
         return res
 
     def getAdjMatrix(self, ped_ids):
