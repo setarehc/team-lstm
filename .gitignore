@@ -1,3 +1,5 @@
+.vscode
+local__*
 # Byte-compiled / optimized / DLL files
 # Reference: https://github.com/github/gitignore/blob/master/Python.gitignore
 __pycache__/

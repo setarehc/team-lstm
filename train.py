@@ -98,8 +98,7 @@ def init(seed, _config, _run):
 
 
 def train(args, _run):
-    origin = (0, 0)
-    reference_point = (0, 1)
+    #import pdb; pdb.set_trace()
 
     # Set directory to save the trained model
     if args.saved_model_dir is not None:

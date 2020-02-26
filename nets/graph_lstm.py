@@ -56,7 +56,7 @@ class GraphModel(BaseModel):
         Y = hidden_states_current.unsqueeze(0).expand(torch.Size([num_nodes]) + hidden_states_current.size()).reshape(num_nodes*num_nodes, -1)
         G = self.g_module(torch.cat((X, Y), 1)).reshape(num_nodes, num_nodes, -1)
         G[adj_matrix == 0] = 0
-        res = torch.sum(G, dim=0)
+        res = torch.sum(G, dim=1)
         return res
 
     def getAdjMatrix(self, ped_ids):

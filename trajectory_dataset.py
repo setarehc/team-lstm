@@ -51,6 +51,14 @@ class TrajectoryDataset(Dataset):
 
         self.frame_to_data, self.frame_list, self.frame_to_num_persons, self.frame_to_persons, self.orig_data, self.idx_to_person, self.person_to_frames = self.frame_preprocess()
 
+    def normalize_data(self, df):
+        normalized_df = df
+        normalized_df['y'] = df['y'] - df['y'].mean()
+        normalized_df['y'] = normalized_df['y'].div(df['y'].std())
+        normalized_df['x'] = df['x'] - df['x'].mean()
+        normalized_df['x'] = normalized_df['x'].div(df['x'].std())
+        return normalized_df
+
     def frame_preprocess(self):
         '''
         Function that will pre-process the input data file
@@ -90,8 +98,9 @@ class TrajectoryDataset(Dataset):
                 df = df.drop((group.index[-excess_count:]))
         
         # Keep every self.keep_every entries of the input dataset
-        del_list = [idx for idx in list(df.index.data) if idx % self.keep_every != 0]
-        df = df.drop(df.index[del_list])
+        if self.keep_every > 1:
+            del_list = [idx for idx in list(df.index.data) if idx % self.keep_every != 0]
+            df = df.drop(df.index[del_list])
 
         target_ids = np.array(df.drop_duplicates(subset={'person_id'}, keep='first', inplace=False)['person_id'])
 
