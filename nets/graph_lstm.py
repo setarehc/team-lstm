@@ -9,6 +9,8 @@ from .base import BaseModel
 import trajectory_dataset as td
 import helper
 
+import itertools
+
 class GraphModel(BaseModel):
 
     def __init__(self, args):
@@ -50,17 +52,19 @@ class GraphModel(BaseModel):
         self.relu = nn.ReLU()
         self.dropout = nn.Dropout(args.dropout)
 
-    def getGraphTensor(self, hidden_states_current, adj_matrix):
-        num_nodes = len(hidden_states_current)
-        X = hidden_states_current.unsqueeze(1).expand(hidden_states_current.size()[:1] + torch.Size([num_nodes]) + hidden_states_current.size()[1:]).reshape(num_nodes*num_nodes, -1)
-        Y = hidden_states_current.unsqueeze(0).expand(torch.Size([num_nodes]) + hidden_states_current.size()).reshape(num_nodes*num_nodes, -1)
-        G = self.g_module(torch.cat((X, Y), 1)).reshape(num_nodes, num_nodes, -1)
-        G[adj_matrix == 0] = 0
-        res = torch.sum(G, dim=1)
+    def getGraphTensor(self, hidden_states, adj_matrix, mask):
+        batch_size, num_nodes, rnn_size = hidden_states.shape
+        X = hidden_states.unsqueeze(2).expand(hidden_states.size()[:2] + torch.Size([num_nodes]) + hidden_states.size()[2:]).reshape(batch_size, num_nodes*num_nodes, -1)
+        Y = hidden_states.unsqueeze(1).expand(hidden_states.size()[:1] + torch.Size([num_nodes]) + hidden_states.size()[1:]).reshape(batch_size, num_nodes*num_nodes, -1)
+        G = self.g_module(torch.cat((X, Y), -1).reshape(-1, 2*rnn_size)).reshape(batch_size, num_nodes, num_nodes, -1)
+        adj_matrix_expanded = adj_matrix.unsqueeze(0).expand(torch.Size([batch_size]) + adj_matrix.size())
+        G[adj_matrix_expanded == 0] = 0
+        G[mask == 0] = 0
+        G[mask.unsqueeze(1).expand(torch.Size([batch_size, num_nodes, num_nodes])) == 0] = 0
+        res = torch.sum(G, dim=2)
         return res
 
-    def getAdjMatrix(self, ped_ids):
-        num_nodes = len(ped_ids)
+    def getAdjMatrix(self, num_nodes):
         if self.graph_type == 'FC': # fully connected graph
             return torch.ones(num_nodes, num_nodes)
         elif self.graph_type == 'EYE': # no one is connected to anyone
@@ -93,29 +97,32 @@ class GraphModel(BaseModel):
             return adjm
  
 
-    def forward(self, batch_item, hidden_states=None, cell_states=None):
+    def forward(self, batch, hidden_states=None, cell_states=None):
         '''
         Forward pass for the model
         params:
-        batch_item: A single batch of dataset
+        batch: A single batch of dataset
         hidden_states: Hidden states of persons
         cell_states: Cell states of persons
-
         returns:
         outputs_return: Outputs corresponding to bivariate Gaussian distributions
         hidden_states
         cell_states
         '''
-        
-        input_data, persons_list, _, lookup, _, _ = batch_item
+        #input_data, persons_list, _, lookup, _, _ = batch_item
+        all_xy_posns, mask = batch
 
-        num_persons = len(lookup)
+        #num_persons = len(lookup)
+        seq_length = all_xy_posns.size(0)
+        batch_size = all_xy_posns.size(1)
+        max_num_persons = all_xy_posns.size(2)
 
         if hidden_states is None: 
-            hidden_states = torch.zeros(num_persons, self.rnn_size)
+            hidden_states = torch.zeros(batch_size, max_num_persons, self.rnn_size)
         if cell_states is None: 
-            cell_states = torch.zeros(num_persons, self.rnn_size)
-        outputs = torch.zeros(self.seq_length, num_persons, self.output_size)
+            cell_states = torch.zeros(batch_size, max_num_persons, self.rnn_size)
+        
+        outputs = torch.zeros(seq_length, batch_size, max_num_persons, self.output_size)
 
         if self.use_cuda:      
             hidden_states = hidden_states.cuda()
@@ -123,76 +130,106 @@ class GraphModel(BaseModel):
             outputs = outputs.cuda()
 
         # For each frame in the sequence
-        for framenum,frame in enumerate(input_data):
+        for framenum in range(seq_length):
+            
+            frame_data = all_xy_posns[framenum]
+            mask_data = mask[framenum]
 
-            # Peds present in the current frame
-            nodeIDs = [int(node_id) for node_id in persons_list[framenum]]
-
-            adj_matrix = self.getAdjMatrix(nodeIDs).to(hidden_states.device)
-
-            if len(nodeIDs) == 0:
-                # If no peds, then go to the next frame
-                continue
-
-            # List of nodes
-            list_of_nodes = [lookup[x] for x in nodeIDs]
-
-            corr_index = Variable((torch.LongTensor(list_of_nodes))) 
-            if self.use_cuda:            
-                corr_index = corr_index.cuda()
-
-            # Select the corresponding input positions
-            nodes_current = frame[list_of_nodes,:]
-
+            # # Peds present in the current frame
+            # node_ids = [int(node_id) for node_id in persons_list[framenum]]
+            # if len(node_ids) == 0:
+            #     # If no peds, then go to the next frame
+            #     continue
+            # # List of nodes
+            # list_of_nodes = [lookup[x] for x in node_ids]
+            # corr_index = Variable((torch.LongTensor(list_of_nodes))) 
+            # if self.use_cuda:            
+            #     corr_index = corr_index.cuda()
+            # # Select the corresponding input positions
+            # nodes_current = frame[list_of_nodes,:]
             # Get the corresponding hidden and cell states
-            hidden_states_current = torch.index_select(hidden_states, 0, corr_index)
-            cell_states_current = torch.index_select(cell_states, 0, corr_index)
-
+            #hidden_states_current = torch.index_select(hidden_states, 0, corr_index)
+            #cell_states_current = torch.index_select(cell_states, 0, corr_index)
+            
+            adj_matrix = self.getAdjMatrix(max_num_persons).to(hidden_states.device)
             # Compute the social tensor
-            graph_tensor = self.getGraphTensor(hidden_states_current, adj_matrix)
+            graph_tensor = self.getGraphTensor(hidden_states, adj_matrix, mask_data)
             # Embed the social tensor
             tensor_embedded = self.f_module(graph_tensor)
 
             # Embed inputs
-            input_embedded = self.dropout(self.relu(self.input_embedding_layer(nodes_current)))
+            input_embedded = self.dropout(self.relu(self.input_embedding_layer(frame_data)))
             
             # Concat input
-            concat_embedded = torch.cat((input_embedded, tensor_embedded), 1)
+            concat_embedded = torch.cat((input_embedded, tensor_embedded), 2)
 
             # One-step of the LSTM
-            h_nodes, c_nodes = self.cell(concat_embedded, (hidden_states_current, cell_states_current))
+            h_nodes, c_nodes = self.cell(concat_embedded.reshape(batch_size * max_num_persons, -1),
+                                        (hidden_states.reshape(batch_size * max_num_persons, -1), 
+                                        cell_states.reshape(batch_size * max_num_persons, -1)))
+            
+            # Update hidden and cell states
+            h_nodes = h_nodes.reshape(batch_size, max_num_persons, -1)
+            c_nodes = c_nodes.reshape(batch_size, max_num_persons, -1)
 
+            h_nodes[mask_data==0] = hidden_states[mask_data==0]
+            hidden_states = h_nodes
+
+            c_nodes = c_nodes - cell_states
+            cell_states = cell_states + c_nodes * mask_data.unsqueeze(2).expand(mask_data.size() + torch.Size([self.rnn_size]))
 
             # Compute the output
-            outputs[framenum, corr_index.data] = self.output_layer(h_nodes)
-
-            # Update hidden and cell states
-            hidden_states[corr_index.data] = h_nodes
-            cell_states[corr_index.data] = c_nodes
+            outputs[framenum] = self.output_layer(hidden_states)
 
         return outputs, hidden_states, cell_states
 
     def computeLoss(self, outputs, batch_item):
         input_data, persons_list, _, lookup, _, _ = batch_item
         return helper.Gaussian2DLikelihood(outputs, input_data, persons_list, lookup)
+    
+    def computeLossBatch(self, outputs, batch):
+        all_xy_posns, mask = batch
+        return helper.Gaussian2DLikelihoodBatch(outputs, all_xy_posns, mask)
 
     def toCuda(self, batch_item):
-        #input_data, persons_list, _, lookup, _, _ = batch_item
+        #input_data, persons_list, num_persons_list, lookup, dataset_dim, init_values_dict = batch_item
         if self.use_cuda:
             batch_item[0] = batch_item[0].cuda()
         return batch_item
+    
+    def toCudaBatch(self, batch):
+        #data, mask = batch
+        if self.use_cuda:
+            batch[0] = batch[0].cuda()
+            batch[1] = batch[1].cuda()
+        return batch
 
     @staticmethod
     def collateFn(items, args):
         batch=[]
+        
+        all_seq_data = []
+        all_persons = []
         for x_seq, num_persons_list_seq, persons_list_seq, folder_path in items:
-            # Get processing file name and then get dimensions of file
-            folder_name = helper.getFolderName(folder_path, args.dataset)
-            dataset_dim = td.dataset_dimensions[folder_name]
-            # Dense vector (tensor) creation
-            x_seq, lookup_seq = td.convertToTensor(x_seq, persons_list_seq)
-            # Vectorize trajectories in sequence
-            x_seq, init_values_dict = helper.vectorizeSeq(x_seq, persons_list_seq, lookup_seq)
-
-            batch.append([x_seq, persons_list_seq, num_persons_list_seq, lookup_seq, dataset_dim, init_values_dict])
+            all_seq_data.append(x_seq)
+            all_persons.append(list(itertools.chain.from_iterable(persons_list_seq)))
+        
+        data, mask = td.tensorizeData(all_seq_data, all_persons)
+        batch = [data, mask]
         return batch
+        
+        ###Old Implementation###
+        # batch=[]
+        # for x_seq, num_persons_list_seq, persons_list_seq, folder_path in items:
+        #     # Get processing file name and then get dimensions of file
+        #     folder_name = helper.getFolderName(folder_path, args.dataset)
+        #     dataset_dim = td.dataset_dimensions[folder_name]
+        #     # Dense vector (tensor) creation
+        #     import pdb; pdb.set_trace()
+        #     x_seq, lookup_seq = td.convertToTensor(x_seq, persons_list_seq)
+        #     # TODO remove vectorizeSeq from below
+        #     # Vectorize trajectories in sequence
+        #     x_seq, init_values_dict = helper.vectorizeSeq(x_seq, persons_list_seq, lookup_seq)
+
+        #     batch.append([x_seq, persons_list_seq, num_persons_list_seq, lookup_seq, dataset_dim, init_values_dict])
+        # return batch

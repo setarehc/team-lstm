@@ -98,7 +98,6 @@ def init(seed, _config, _run):
 
 
 def train(args, _run):
-    #import pdb; pdb.set_trace()
 
     # Set directory to save the trained model
     if args.saved_model_dir is not None:
@@ -137,8 +136,7 @@ def train(args, _run):
     # Path to store the checkpoint file (trained model)
     def checkpoint_path(x):
         return os.path.join(save_directory, save_tar_name + str(x) + '.tar')
-
-    #import pdb; pdb.set_trace()
+    
     # If we should continue training a pre-trained model
     if args.saved_model_dir is not None:
         # Load the config file of model:
@@ -173,8 +171,6 @@ def train(args, _run):
         init_epoch = 0
         optimizer = torch.optim.Adagrad(net.parameters(), weight_decay=args.lambda_param)
 
-    num_batch = 0
-
     # Training
     for epoch in range(init_epoch, args.num_epochs+init_epoch):
         print('****************Training epoch beginning******************')
@@ -188,27 +184,41 @@ def train(args, _run):
             loss_batch = 0
 
             # Check if last batch is shorter that batch_size 
-            if len(batch) < args.batch_size:
+            if batch[0].size(1) < args.batch_size:
                 continue
+            
+            #import pdb; pdb.set_trace()
 
-            # For each sequence
-            for batch_item in batch:
-                #import pdb; pdb.set_trace()
-                batch_item = net.toCuda(batch_item)
+            batch = net.toCudaBatch(batch)
 
-                # Zero out gradients
-                net.zero_grad()
-                optimizer.zero_grad()
+            optimizer.zero_grad()
 
-                # Forward prop
-                outputs, _, _ = net(batch_item)
+            # Forward prop
+            outputs, _, _ = net(batch)
+            num_seen_sequences += batch[0].size(1) #TODO: Check if correct
 
-                # Increment number of seen sequences
-                num_seen_sequences += 1
+            # Compute loss
+            loss = net.computeLossBatch(outputs, batch)
+            loss_batch += loss #TODO: Check if needs devision by batch_size or not
 
-                # Compute loss
-                loss = net.computeLoss(outputs, batch_item)
-                loss_batch += loss / len(batch)
+            # # For each sequence
+            # for batch_item in batch:
+
+            #     batch_item = net.toCuda(batch_item)
+
+            #     # Zero out gradients
+            #     #net.zero_grad()
+            #     optimizer.zero_grad()
+
+            #     # Forward prop
+            #     outputs, _, _ = net(batch_item)
+                
+            #     # Increment number of seen sequences
+            #     num_seen_sequences += 1
+
+            #     # Compute loss
+            #     loss = net.computeLoss(outputs, batch_item)
+            #     loss_batch += loss / len(batch)
 
             # Compute gradients
             loss_batch.backward()
@@ -221,7 +231,6 @@ def train(args, _run):
 
             end = time.time()
             loss_epoch += loss_batch.item()
-            num_batch += 1
 
             num_batches = math.floor(len(train_loader.dataset) / args.batch_size)
 
@@ -243,7 +252,6 @@ def train(args, _run):
             # Validate
             if len(valid_loader) > 0:
                 mux, muy, sx, sy, corr = getCoef(outputs)
-                #import pdb; pdb.set_trace()
                 _run.log_scalar(metric_name='valid.mux', value=torch.mean(mux).item(), step=epoch)
                 _run.log_scalar(metric_name='valid.muy', value=torch.mean(muy).item(), step=epoch)
                 _run.log_scalar(metric_name='valid.sx', value=torch.mean(sx).item(), step=epoch)

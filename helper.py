@@ -35,7 +35,6 @@ def getMethodName(model_name):
     }.get(model_name, 'SOCIALLSTM')
 
 def getModel(arguments, infer = False):
-    #import pdb; pdb.set_trace()
     # return a model given index and arguments
     model_type = arguments.model
     if model_type == 'social':
@@ -54,6 +53,14 @@ def getCoef(outputs):
     outputs : Output of the SRNN model
     '''
     mux, muy, sx, sy, corr = outputs[:, :, 0], outputs[:, :, 1], outputs[:, :, 2], outputs[:, :, 3], outputs[:, :, 4]
+
+    sx = torch.exp(sx)
+    sy = torch.exp(sy)
+    corr = torch.tanh(corr)
+    return mux, muy, sx, sy, corr
+
+def getCoefBatch(outputs):
+    mux, muy, sx, sy, corr = outputs[:, :, :, 0], outputs[:, :, :, 1], outputs[:, :, :, 2], outputs[:, :, :, 3], outputs[:, :, :, 4]
 
     sx = torch.exp(sx)
     sy = torch.exp(sy)
@@ -285,9 +292,6 @@ def Gaussian2DLikelihood(outputs, targets, nodesPresent, look_up):
     # Numerical stability
     epsilon = 1e-20
 
-    #if torch.any(result > 1):
-    #    import pdb; pdb.set_trace()
-
     result = -torch.log(torch.clamp(result, min=epsilon))
 
     loss = 0
@@ -295,18 +299,55 @@ def Gaussian2DLikelihood(outputs, targets, nodesPresent, look_up):
 
     for framenum in range(seq_length):
 
-        nodeIDs = nodesPresent[framenum]
-        nodeIDs = [int(nodeID) for nodeID in nodeIDs]
+        node_ids = nodesPresent[framenum]
+        node_ids = [int(node_id) for node_id in node_ids]
 
-        for nodeID in nodeIDs:
-            nodeID = look_up[nodeID]
-            loss = loss + result[framenum, nodeID]
+        for node_id in node_ids:
+            nodeID = look_up[node_id]
+            loss = loss + result[framenum, node_id]
             counter = counter + 1
 
     if counter != 0:
         return loss / counter
     else:
         return loss
+
+def Gaussian2DLikelihoodBatch(outputs, all_xy_posns, mask):
+    #import pdb; pdb.set_trace()
+
+    seq_length = outputs.size(0)
+    # Extract mean, std devs and correlation
+    mux, muy, sx, sy, corr = getCoefBatch(outputs)
+
+    # Compute factors
+    normx = all_xy_posns[:, :, :, 0] - mux
+    normy = all_xy_posns[:, :, :, 1] - muy
+    sxsy = sx * sy
+
+    z = (normx/sx)**2 + (normy/sy)**2 - 2*((corr*normx*normy)/sxsy)
+    negRho = 1 - corr**2
+
+    # Numerator
+    result = torch.exp(-z/(2*negRho))
+    # Normalization factor
+    denom = 2 * np.pi * (sxsy * torch.sqrt(negRho))
+
+    # Final PDF calculation
+    result = result / denom
+
+    # Numerical stability
+    epsilon = 1e-20
+
+    result = -torch.log(torch.clamp(result, min=epsilon))
+
+    # Zero out results for persons not present the dataset
+    result[mask == 0] = 0
+    result = result.sum(2).sum(0)
+    count = mask.sum(2).sum(0)
+    result /= count
+    loss = torch.mean(result)
+
+    return loss
 
 ##################### Data related methods ######################
 

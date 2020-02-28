@@ -37,6 +37,45 @@ def convertToTensor(seq_data, persons_list):
 
     return return_arr, lookup_table
 
+def tensorizeData(all_xy_posns, all_ids):
+    """
+    Fucntion that converts data of a batch into two tensors; positions (seq_len, batch_size, max_num_persons, 2) and mask (seq_len, batch_size, max_num_persons)
+    max_num_persons = maximum number of persons in all of the frames of all sequences in the batch
+    For people not present in a frame, x and y values are set to 0
+    :input:
+    all_xy_posns: a list of length batch_size where each element is a seq_data (a list of length seq_length) where each element is an array of positions of persons 
+    present in that particular frame with size (num_persons, 3)
+    all-ids: a list of ids of persons present in all sequences in a batch
+    :return:
+    tensor_xy_posns: padded positions of all persons across frames of a batch(seq_len, batch_size, max_num_persons, 2)
+    mask: a (seq_len, batch_size, max_num_persons) binary tensor; mask[f, b, i] = 1 means persons with index=i is present in frame f of batch b
+    """
+    # Get unique persons ids in the whole sequence
+    unique_ids = pd.unique(list(itertools.chain.from_iterable(all_ids))).astype(int)
+
+    # Create a lookup table which maps person_id to tensor_seq_data index
+    lookup_dict = dict(zip(unique_ids, range(0, len(unique_ids))))
+
+    # Create the tensor seq_data
+    seq_length = len(all_xy_posns[0])
+    batch_size = len(all_xy_posns)
+    max_num_persons = len(lookup_dict)
+    dim = 2
+    tensor_xy_posns = np.zeros(shape=(seq_length, batch_size, max_num_persons, 2))
+    mask = np.zeros(shape=(seq_length, batch_size, max_num_persons))
+
+    # Set values of all_xy_posns and mask
+    for batch_idx, batch in enumerate(all_xy_posns):
+        for frame_idx, frame in enumerate(batch):
+            corr_index = [lookup_dict[x] for x in frame[:, 0]]
+            tensor_xy_posns[frame_idx, batch_idx, corr_index, :] = frame[:, 1:3]
+            mask[frame_idx, batch_idx, corr_index] = 1
+    #import pdb; pdb.set_trace()
+    final_tensor_xy_posns = torch.from_numpy(np.array(tensor_xy_posns)).float()
+    final_mask = torch.from_numpy(np.array(mask)).float()
+
+    return final_tensor_xy_posns, final_mask
+
 
 class TrajectoryDataset(Dataset):
 
