@@ -106,6 +106,40 @@ def sampleGaussian2d(mux, muy, sx, sy, corr, nodesPresent, look_up):
 
     return next_x, next_y
 
+def sampleGaussian2dBatch(mux, muy, sx, sy, corr, mask):
+    '''
+    Parameters
+    ==========
+    mux, muy, sx, sy, corr: Tensors of shape (seq_length, batch_size, num_persons)
+    mask: Tensor of shape (seq_length, batch_size, num_persons)
+
+    Returns
+    =======
+    next_x, next_y : a tensor of shape (batch_size, num_persons)
+    Contains sampled values from the 2D Gaussian
+    '''
+    o_mux, o_muy, o_sx, o_sy, o_corr = mux[0, :, :], muy[0, :, :], sx[0, :, :], sy[0, :, :], corr[0, :, :]
+
+    batch_size = mux.size(1)
+    num_persons = mux.size(2)
+    next_x = torch.zeros(batch_size, num_persons)
+    next_y = torch.zeros(batch_size, num_persons)
+
+    for batch_idx in range(batch_size):
+        for person_idx in range(num_persons):
+            if mask[0, batch_idx, person_idx] == 0:
+                continue
+            mean = [o_mux[batch_idx, person_idx], o_muy[batch_idx, person_idx]]
+            cov = [[o_sx[batch_idx, person_idx]*o_sx[batch_idx, person_idx], o_corr[batch_idx, person_idx]*o_sx[batch_idx, person_idx]*o_sy[batch_idx, person_idx]],
+                    [o_corr[batch_idx, person_idx]*o_sx[batch_idx, person_idx]*o_sy[batch_idx, person_idx], o_sy[batch_idx, person_idx]*o_sy[batch_idx, person_idx]]]
+            mean = np.array(mean, dtype='float')
+            cov = np.array(cov, dtype='float')
+            next_values = np.random.multivariate_normal(mean, cov, 1)
+            next_x[batch_idx, person_idx] = next_values[0][0]
+            next_y[batch_idx, person_idx] = next_values[0][1]
+
+    return next_x, next_y
+
 def getMeanError(ret_nodes, nodes, assumedNodesPresent, trueNodesPresent, using_cuda, look_up):
     '''
     Parameters
@@ -206,8 +240,8 @@ def Gaussian2DLikelihoodInference(outputs, targets, nodesPresent, pred_length, l
     '''
     Computes the likelihood of predicted locations under a bivariate Gaussian distribution at test time
 
-    Parameters:
-
+    Parameters
+    ==========
     outputs: Torch variable containing tensor of shape seq_length x numNodes x 1 x output_size
     targets: Torch variable containing tensor of shape seq_length x numNodes x 1 x input_size
     nodesPresent : A list of lists, of size seq_length. Each list contains the nodeIDs that are present in the frame
@@ -348,6 +382,18 @@ def Gaussian2DLikelihoodBatch(outputs, all_xy_posns, mask):
     loss = torch.mean(result)
 
     return loss
+
+def getPedsList(mask):
+    """
+    Parameters
+    ==========
+    mask: A tensor of shape (seq_len x max_num_persons)
+    """
+    peds_seq = []
+    seq_len = len(mask)
+    for seq_idx in range(seq_len):
+        peds_seq.append((mask[seq_idx] != 0).nonzero().flatten().tolist())
+    return peds_seq
 
 ##################### Data related methods ######################
 

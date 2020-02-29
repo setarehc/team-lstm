@@ -182,43 +182,29 @@ def train(args, _run):
             start = time.time()
 
             loss_batch = 0
+            #import pdb; pdb.set_trace()
+            # Check if last batch is shorter that batch_size
+            curr_batch_length = 0
+            if args.model == 'graph':
+                curr_batch_length = batch[0].size(1)
+            else:
+                curr_batch_length = len(batch)
 
-            # Check if last batch is shorter that batch_size 
-            if batch[0].size(1) < args.batch_size:
+            if curr_batch_length < args.batch_size:
                 continue
             
-            #import pdb; pdb.set_trace()
-
             batch = net.toCudaBatch(batch)
 
             optimizer.zero_grad()
 
             # Forward prop
             outputs, _, _ = net(batch)
+
             num_seen_sequences += batch[0].size(1) #TODO: Check if correct
 
             # Compute loss
             loss = net.computeLossBatch(outputs, batch)
             loss_batch += loss #TODO: Check if needs devision by batch_size or not
-
-            # # For each sequence
-            # for batch_item in batch:
-
-            #     batch_item = net.toCuda(batch_item)
-
-            #     # Zero out gradients
-            #     #net.zero_grad()
-            #     optimizer.zero_grad()
-
-            #     # Forward prop
-            #     outputs, _, _ = net(batch_item)
-                
-            #     # Increment number of seen sequences
-            #     num_seen_sequences += 1
-
-            #     # Compute loss
-            #     loss = net.computeLoss(outputs, batch_item)
-            #     loss_batch += loss / len(batch)
 
             # Compute gradients
             loss_batch.backward()
@@ -242,9 +228,6 @@ def train(args, _run):
 
         loss_epoch /= num_batches
 
-        # Log loss values
-        #log_file_curve.write("Training epoch: " + str(epoch) + " loss: " + str(loss_epoch) + '\n')
-
         # Sacred metrics plot
         _run.log_scalar(metric_name='train.loss', value=loss_epoch, step=epoch)
         
@@ -256,6 +239,7 @@ def train(args, _run):
                 _run.log_scalar(metric_name='valid.muy', value=torch.mean(muy).item(), step=epoch)
                 _run.log_scalar(metric_name='valid.sx', value=torch.mean(sx).item(), step=epoch)
                 _run.log_scalar(metric_name='valid.sy', value=torch.mean(sy).item(), step=epoch)
+                #import pdb; pdb.set_trace()
                 valid_loss = validLoss(net, valid_loader, args)
                 total_error, final_error, norm_l2_dists = testHelper(net, valid_loader, args, args, None)
                 total_error = total_error.item() if isinstance(total_error, torch.Tensor) else total_error
@@ -286,35 +270,28 @@ def validLoss(net, valid_loader, args):
     :return: average log-likelihood loss
     '''
     with torch.no_grad():
-        num_seen_sequences = 0
+        num_batches = 0
         total_loss = 0
-
+        
         for batch_idx, batch in enumerate(valid_loader):
 
-            loss_batch = 0
-
             # Check if last batch is shorter that batch_size
-            # batch_size = len(batch) if (len(batch) < args.batch_size) else args.batch_size
-            if len(batch) < args.batch_size:
+            if batch[0].size(1) < args.batch_size:
                 continue
+            
+            batch = net.toCudaBatch(batch)
 
-            # For each sequence
-            for batch_item in batch:
-                batch_item = net.toCuda(batch_item)
+            # Forward prop
+            outputs, _, _ = net(batch)
 
-                # Forward prop
-                outputs, _, _ = net(batch_item)
+            # Increment number of seen sequences
+            num_batches += 1 #TODO: Check if correct
 
-                # Increment number of seen sequences
-                num_seen_sequences += 1
+            # Compute loss
+            loss = net.computeLossBatch(outputs, batch)
+            total_loss += loss.item() #TODO: Check if needs devision by batch_size or not
 
-                # Compute loss
-                loss = net.computeLoss(outputs, batch_item)
-                loss_batch += loss.item()
-
-            total_loss += loss_batch
-
-        return total_loss / num_seen_sequences
+        return total_loss / num_batches
 
 @ex.automain
 def experiment(_seed, _config, _run):

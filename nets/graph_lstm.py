@@ -134,22 +134,6 @@ class GraphModel(BaseModel):
             
             frame_data = all_xy_posns[framenum]
             mask_data = mask[framenum]
-
-            # # Peds present in the current frame
-            # node_ids = [int(node_id) for node_id in persons_list[framenum]]
-            # if len(node_ids) == 0:
-            #     # If no peds, then go to the next frame
-            #     continue
-            # # List of nodes
-            # list_of_nodes = [lookup[x] for x in node_ids]
-            # corr_index = Variable((torch.LongTensor(list_of_nodes))) 
-            # if self.use_cuda:            
-            #     corr_index = corr_index.cuda()
-            # # Select the corresponding input positions
-            # nodes_current = frame[list_of_nodes,:]
-            # Get the corresponding hidden and cell states
-            #hidden_states_current = torch.index_select(hidden_states, 0, corr_index)
-            #cell_states_current = torch.index_select(cell_states, 0, corr_index)
             
             adj_matrix = self.getAdjMatrix(max_num_persons).to(hidden_states.device)
             # Compute the social tensor
@@ -203,6 +187,81 @@ class GraphModel(BaseModel):
             batch[0] = batch[0].cuda()
             batch[1] = batch[1].cuda()
         return batch
+
+    def sample(self, batch, args, saved_args):
+        '''
+        The sample function
+        params:
+        batch: A single batch item
+        net: The model
+        args: Model arguments
+        saved_args: Configuration arguments used for training the model
+        '''
+        #import pdb; pdb.set_trace()
+        batch = self.toCudaBatch(batch)
+
+        # Unpack batch
+        xy_posns = batch[0]
+        mask = batch[1]
+
+        batch_size = xy_posns.size(1)
+        num_persons = xy_posns.size(2)
+        dim = 2
+
+        with torch.no_grad():
+            # Initialize hidden and cell states
+            hidden_states = torch.zeros(batch_size, num_persons, args.rnn_size)
+            cell_states = torch.zeros(batch_size, num_persons, args.rnn_size)
+            
+            # Initialize the return data structure
+            sampled_xy_posns = torch.zeros(args.obs_length + args.pred_length, batch_size, num_persons, dim)
+            
+            if args.use_cuda:
+                hidden_states = hidden_states.cuda()
+                cell_states = cell_states.cuda()
+                sampled_xy_posns = sampled_xy_posns.cuda()
+
+            # For the observed part of the trajectory
+            for tstep in range(args.obs_length - 1):
+                # Forward prop
+                outputs, hidden_states, cell_states = self.forward([xy_posns[tstep].unsqueeze(0), mask[tstep].unsqueeze(0)],
+                                                        hidden_states,
+                                                        cell_states)
+
+                # Extract the mean, std and corr of the bivariate Gaussian
+                mux, muy, sx, sy, corr = helper.getCoefBatch(outputs)
+                # Sample from the bivariate Gaussian
+                next_x, next_y = helper.sampleGaussian2dBatch(mux.data, muy.data, sx.data, sy.data, corr.data, mask[tstep].unsqueeze(0))
+                # Save predicted positions into return data structure
+                sampled_xy_posns[tstep + 1, :, :, 0] = next_x
+                sampled_xy_posns[tstep + 1, :, :, 1] = next_y
+
+            # For the predicted part of the trajectory
+            for tstep in range(args.obs_length - 1, args.pred_length + args.obs_length - 1):
+                # Do a forward prop
+                if tstep == args.obs_length - 1:
+                    #net_input = x_seq[tstep].view(1, num_persons, 2)
+                    net_input = xy_posns[tstep].unsqueeze(0)
+                else:
+                    #net_input = sampled_x_seq[tstep].view(1, num_persons, 2)
+                    net_input = sampled_xy_posns[tstep].unsqueeze(0)
+
+                outputs, hidden_states, cell_states = self.forward([net_input, mask[tstep].unsqueeze(0)],
+                                                        hidden_states,
+                                                        cell_states)
+                    
+                # Extract the mean, std and corr of the bivariate Gaussian
+                mux, muy, sx, sy, corr = helper.getCoefBatch(outputs)
+                # Sample from the bivariate Gaussian
+                next_x, next_y = helper.sampleGaussian2dBatch(mux.data, muy.data, sx.data, sy.data, corr.data, mask[tstep].unsqueeze(0))
+
+                # Save predicted positions into return data structure
+                sampled_xy_posns[tstep + 1, :, :, 0] = next_x
+                sampled_xy_posns[tstep + 1, :, :, 1] = next_y
+
+            # Revert the points back to the original space
+            #sampled_x_seq = revertSeq(sampled_x_seq.data.cpu(), peds_list, lookup, init_values_dict)
+            return sampled_xy_posns
 
     @staticmethod
     def collateFn(items, args):

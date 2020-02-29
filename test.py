@@ -69,6 +69,7 @@ def testHelper(net, test_loader, sample_args, saved_args, result_directory):
     # Variable to maintain total error
     total_error = 0
     final_error = 0
+
     # *Kevin Murphy*
     norm_l2_dists = torch.zeros(sample_args.obs_length)
     if sample_args.use_cuda:
@@ -76,64 +77,63 @@ def testHelper(net, test_loader, sample_args, saved_args, result_directory):
 
     for batch_idx, batch in enumerate(test_loader):
 
-        for batch_item in batch:
-            start = time.time()
-            # Unpack batch
-            if saved_args.model == 'social':
-                x_seq, _, peds_list, _, lookup, _, _ = batch_item
-            else:
-                x_seq, peds_list, _, lookup, _, _ = batch_item
-            
-            # Will be used for error calculation
-            orig_x_seq = x_seq.clone()
+        batch = net.toCudaBatch(batch)
 
-            # *CUDA*
-            if sample_args.use_cuda:
-                x_seq = x_seq.cuda()
-                orig_x_seq = orig_x_seq.cuda()
-            
-            # The sample function
-            sampled_x_seq = sample(batch_item, net, sample_args, saved_args)
+        # Unpack batch
+        xy_posns = batch[0]
+        mask = batch[1]
 
-            if sample_args.use_cuda:
-                sampled_x_seq = sampled_x_seq.cuda()
+        orig_data = xy_posns # Used for error calculation
+        
+        # Predict next xy positions
+        sampled_xy_posns = net.sample(batch, sample_args, saved_args)
 
-            # *ORIGINAL TEST*
-            total_error += getMeanError(sampled_x_seq[sample_args.obs_length:].data,
-                                        orig_x_seq[sample_args.obs_length:].data,
-                                        peds_list[sample_args.obs_length:],
-                                        peds_list[sample_args.obs_length:],
-                                        sample_args.use_cuda, lookup)
+        if sample_args.use_cuda:
+                sampled_xy_posns = sampled_xy_posns.cuda()
+        
+        for batch_idx in range(xy_posns.size(1)):
+            start = time.time() #TODO: check whether start and end are correctly placed or not
 
-            final_error += getFinalError(sampled_x_seq[sample_args.obs_length:].data,
-                                        orig_x_seq[sample_args.obs_length:].data,
-                                        peds_list[sample_args.obs_length:],
-                                        peds_list[sample_args.obs_length:], lookup)
+            sampled_seq = sampled_xy_posns[:, batch_idx, :, :]
+            orig_seq = xy_posns[:, batch_idx, :, :]
+            persons_seq = getPedsList(mask[:, batch_idx, :])
+            lookup_seq = {i: j for (i,j) in zip(range(xy_posns.size(2)),range(xy_posns.size(2)))}
+
+            total_error += getMeanError(sampled_seq[sample_args.obs_length:].data,
+                                        orig_seq[sample_args.obs_length:].data,
+                                        persons_seq[sample_args.obs_length:],
+                                        persons_seq[sample_args.obs_length:],
+                                        sample_args.use_cuda, lookup_seq)
+
+            final_error += getFinalError(sampled_seq[sample_args.obs_length:].data,
+                                        orig_seq[sample_args.obs_length:].data,
+                                        persons_seq[sample_args.obs_length:],
+                                        persons_seq[sample_args.obs_length:], lookup_seq)
 
             # *Kevin Murphy*
-            norm_l2_dists += getNormalizedL2Distance(sampled_x_seq[:sample_args.obs_length].data,
-                                                        orig_x_seq[:sample_args.obs_length].data,
-                                                        peds_list[:sample_args.obs_length],
-                                                        peds_list[:sample_args.obs_length],
-                                                    sample_args.use_cuda, lookup)
+            norm_l2_dists += getNormalizedL2Distance(sampled_seq[:sample_args.obs_length].data,
+                                                        orig_seq[:sample_args.obs_length].data,
+                                                        persons_seq[:sample_args.obs_length],
+                                                        persons_seq[:sample_args.obs_length],
+                                                    sample_args.use_cuda, lookup_seq)
             
             # Save predicted results
             #import pdb; pdb.set_trace()
             if result_directory is not None:
-                res = {'pred_pos': sampled_x_seq[:sample_args.obs_length].tolist(),
-                    'gt_pos': orig_x_seq[:sample_args.obs_length].tolist(),
-                    'persons': peds_list[:sample_args.obs_length],
-                    'lookup': {int(k): v for k,v in lookup.items()}}
+                res = {'pred_pos': sampled_seq[:sample_args.obs_length].tolist(),
+                    'gt_pos': orig_seq[:sample_args.obs_length].tolist(),
+                    'persons': persons_seq[:sample_args.obs_length],
+                    'lookup': {int(k): v for k,v in lookup_seq.items()}}
                 os.makedirs(os.path.join(result_directory, str(sample_args.epoch)), exist_ok=True)
                 with open(os.path.join(result_directory, str(sample_args.epoch), 'config.json'), "w") as fp:
                     json.dump(res, fp)
             
             end = time.time()
-
+        
         print(' Processed trajectory number : ', batch_idx + 1, 'out of', num_batches,
               'trajectories in time', end - start)
 
-    return total_error, final_error, norm_l2_dists
+    return total_error, final_error, norm_l2_dists #TODO: needs devision by batch_size
 
 
 def test(sample_args, _run):
@@ -174,8 +174,6 @@ def test(sample_args, _run):
     error_directory = os.path.join(f_prefix, 'errors/', exp_num)#, str(sample_args.epoch))
 
     seq_len = sample_args.seq_length
-
-    #import pdb; pdb.set_trace()
 
     # Determine the test files path
     # Debug: manually debug the code
@@ -248,109 +246,6 @@ def test(sample_args, _run):
     for i in range(sample_args.obs_length):
         print('Normalized l2 distances for step %d is %f' % (i, norm_l2_dists.data[i]))
     print('Smallest error iteration:', smallest_err_iter_num + 1)
-
-
-def sample(batch_item, net, args, saved_args):
-    '''
-    The sample function
-    params:
-    batch_item: A single batch item
-    net: The model
-    args: Model arguments
-    saved_args: Configuration arguments used for training the model
-    '''
-    #import pdb; pdb.set_trace()
-    # Unpack batch
-    if saved_args.model == 'social':
-        x_seq, grids, peds_list, num_peds_list, lookup, dataset_dim, init_values_dict = batch_item
-    else:
-        x_seq, peds_list, num_peds_list, lookup, dataset_dim, init_values_dict = batch_item
-
-    if args.use_cuda:
-        x_seq = x_seq.cuda()
-
-    # Number of peds in the sequence
-    num_persons = len(lookup)
-
-    with torch.no_grad():
-        # Initialize hidden and cell states
-        hidden_states = torch.zeros(num_persons, args.rnn_size)
-        cell_states = torch.zeros(num_persons, args.rnn_size)
-        # Initialize the return data structure
-        sampled_x_seq = torch.zeros(args.obs_length + args.pred_length, num_persons, 2)
-        if args.use_cuda:
-            hidden_states = hidden_states.cuda()
-            cell_states = cell_states.cuda()
-            sampled_x_seq = sampled_x_seq.cuda()
-
-        # For the observed part of the trajectory
-        for tstep in range(args.obs_length - 1):
-            # Do a forward prop
-            if saved_args.model == 'social':
-                out_obs, hidden_states, cell_states = net([x_seq[tstep].view(1, num_persons, 2),
-                                                          [grids[tstep]], [peds_list[tstep]], 
-                                                          [num_peds_list[tstep]], lookup,
-                                                          dataset_dim, init_values_dict],
-                                                          hidden_states, cell_states)
-            else:
-                out_obs, hidden_states, cell_states = net([x_seq[tstep].view(1, num_persons, 2),
-                                                          [peds_list[tstep]], [num_peds_list[tstep]],
-                                                          lookup, dataset_dim, init_values_dict],
-                                                          hidden_states, cell_states)
-
-            # Extract the mean, std and corr of the bivariate Gaussian
-            mux, muy, sx, sy, corr = getCoef(out_obs)
-            # Sample from the bivariate Gaussian
-            next_x, next_y = sampleGaussian2d(mux.data, muy.data, sx.data, sy.data, corr.data, peds_list[tstep], lookup)
-            # Save predicted positions into return data structure
-            sampled_x_seq[tstep + 1, :, 0] = next_x
-            sampled_x_seq[tstep + 1, :, 1] = next_y
-
-        # Set last seen grid
-        if saved_args.model == 'social':
-            prev_grid = grids[args.obs_length - 1].clone()
-
-        # For the predicted part of the trajectory
-        for tstep in range(args.obs_length - 1, args.pred_length + args.obs_length - 1):
-            # Do a forward prop
-            if tstep == args.obs_length - 1:
-                net_input = x_seq[tstep].view(1, num_persons, 2)
-            else:
-                net_input = sampled_x_seq[tstep].view(1, num_persons, 2)
-            
-            if saved_args.model == 'social':
-                outputs, hidden_states, cell_states = net([net_input,
-                                                          [prev_grid], [peds_list[tstep]], [num_peds_list[tstep]],
-                                                          lookup, dataset_dim, init_values_dict],
-                                                          hidden_states, cell_states) 
-            else:
-                outputs, hidden_states, cell_states = net([net_input, 
-                                                          [peds_list[tstep]], [num_peds_list[tstep]],
-                                                          lookup, dataset_dim, init_values_dict],
-                                                          hidden_states, cell_states)
-                
-
-            # Extract the mean, std and corr of the bivariate Gaussian
-            mux, muy, sx, sy, corr = getCoef(outputs)
-            # Sample from the bivariate Gaussian
-            next_x, next_y = sampleGaussian2d(mux.data, muy.data, sx.data, sy.data, corr.data, peds_list[tstep],
-                                              lookup)
-
-            # Save predicted positions into return data structure
-            sampled_x_seq[tstep + 1, :, 0] = next_x
-            sampled_x_seq[tstep + 1, :, 1] = next_y
-
-            # Compute grid masks based on the predicted positions
-            if saved_args.model == 'social':
-                cor_pred_positions = getCorPredPositions(sampled_x_seq[tstep+1], peds_list[tstep+1], lookup, args)
-                prev_grid = getGridMask(cor_pred_positions.data.cpu(), dataset_dim, len(peds_list[tstep+1]), saved_args.neighborhood_size, saved_args.grid_size)
-                prev_grid = torch.from_numpy(prev_grid).float()
-                if args.use_cuda:
-                    prev_grid = prev_grid.cuda()
-
-        # Revert the points back to the original space
-        #sampled_x_seq = revertSeq(sampled_x_seq.data.cpu(), peds_list, lookup, init_values_dict)
-        return sampled_x_seq
 
 def getCorPredPositions(pred_positions, peds_list, lookup, args):
     peds_list = [int(ped) for ped in peds_list]
