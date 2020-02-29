@@ -96,6 +96,12 @@ def init(seed, _config, _run):
     # utils.seedAll(seed) # TODO: implement seedAll
     return args
 
+class MyDataParallel(torch.nn.DataParallel):
+    def __getattr__(self, name):
+        try:
+            return super().__getattr__(name)
+        except AttributeError:
+            return getattr(self.module, name)
 
 def train(args, _run):
 
@@ -144,6 +150,7 @@ def train(args, _run):
             saved_args = DotDict(json.load(f))
         # Build empty net with the above config:
         net = getModel(saved_args, True)
+        #net = MyDataParallel(net)
         if args.use_cuda:
             net = net.cuda()
         # Get the last trained epoch to continue training:
@@ -166,6 +173,7 @@ def train(args, _run):
             net = VanillaModel(args)
         else:
             raise ValueError(f'Unexpected value for args.model ({args.model})')
+        #net = MyDataParallel(net)
         if args.use_cuda:
             net = net.cuda()
         init_epoch = 0
