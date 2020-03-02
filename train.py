@@ -207,8 +207,8 @@ def train(args, _run):
 
             # Forward prop
             outputs, _, _ = net(batch)
-
-            num_seen_sequences += batch[0].size(1) #TODO: Check if correct
+            
+            num_seen_sequences += curr_batch_length #TODO: Check if correct
 
             # Compute loss
             loss = net.computeLossBatch(outputs, batch)
@@ -282,9 +282,13 @@ def validLoss(net, valid_loader, args):
         total_loss = 0
         
         for batch_idx, batch in enumerate(valid_loader):
-
+            
+            if args.model == 'graph':
+                curr_batch_length = batch[0].size(1)
+            else:
+                curr_batch_length = len(batch)
             # Check if last batch is shorter that batch_size
-            if batch[0].size(1) < args.batch_size:
+            if curr_batch_length < args.batch_size:
                 continue
             
             batch = net.toCudaBatch(batch)

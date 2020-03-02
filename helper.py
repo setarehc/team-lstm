@@ -293,13 +293,13 @@ def Gaussian2DLikelihoodInference(outputs, targets, nodesPresent, pred_length, l
         return loss
 
 
-def Gaussian2DLikelihood(outputs, targets, nodesPresent, look_up):
+def Gaussian2DLikelihood(outputs, targets, persons, look_up):
     '''
     params:
     outputs : predicted locations
     targets : true locations
     assumedNodesPresent : Nodes assumed to be present in each frame in the sequence
-    nodesPresent : True nodes present in each frame in the sequence
+    persons : True nodes present in each frame in the sequence
     look_up : lookup table for determining which ped is in which array index
 
     '''
@@ -331,14 +331,14 @@ def Gaussian2DLikelihood(outputs, targets, nodesPresent, look_up):
     loss = 0
     counter = 0
 
-    for framenum in range(seq_length):
+    for frame_num in range(seq_length):
 
-        node_ids = nodesPresent[framenum]
+        node_ids = persons[frame_num]
         node_ids = [int(node_id) for node_id in node_ids]
 
         for node_id in node_ids:
-            nodeID = look_up[node_id]
-            loss = loss + result[framenum, node_id]
+            node_idx = look_up[node_id]
+            loss = loss + result[frame_num, node_idx]
             counter = counter + 1
 
     if counter != 0:

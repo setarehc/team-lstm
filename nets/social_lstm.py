@@ -10,6 +10,9 @@ import trajectory_dataset as td
 import helper
 import grid
 
+import itertools
+import pandas as pd
+
 class SocialModel(BaseModel):
 
     def __init__(self, args):
@@ -61,12 +64,20 @@ class SocialModel(BaseModel):
         # Reshape the social tensor
         social_tensor = social_tensor.view(numNodes, self.grid_size*self.grid_size*self.rnn_size)
         return social_tensor
+    
+    def getAllPersons(self, batch):
+        all_persons_list = []
+        for batch_item in batch:
+            all_persons_list.append(batch_item[2])
+        
+        return_list = list(itertools.chain.from_iterable(all_persons_list))
+        return list(itertools.chain.from_iterable(return_list))
             
-    def forward(self, batch_item, hidden_states=None, cell_states=None):
+    def forward(self, batch, hidden_states=None, cell_states=None):
         '''
         Forward pass for the model
         params:
-        batch_item: A single batch item of the dataset
+        batch: A single batch item of the dataset
         hidden_states: Hidden states of persons
         cell_states: Cell states of persons
 
@@ -75,73 +86,95 @@ class SocialModel(BaseModel):
         hidden_states
         cell_states
         '''
-        
-        input_data, grids, persons_list, _, lookup, _, _ = batch_item
-        
-        num_persons = len(lookup)
+
+        seq_length = len(batch[0][0])
+        batch_size = len(batch)
+        all_persons_batch = pd.unique(self.getAllPersons(batch))
+        lookup_batch = {i:idx for i,idx in zip(all_persons_batch, range(len(all_persons_batch)))}
+        max_num_persons = len(all_persons_batch)
 
         if hidden_states is None: 
-            hidden_states = torch.zeros(num_persons, self.rnn_size)
+            hidden_states = torch.zeros(batch_size, max_num_persons, self.rnn_size)
         if cell_states is None: 
-            cell_states = torch.zeros(num_persons, self.rnn_size)
-        outputs = torch.zeros(self.seq_length, num_persons, self.output_size)
+            cell_states = torch.zeros(batch_size, max_num_persons, self.rnn_size)
+        
+        outputs = torch.zeros(seq_length, batch_size, max_num_persons, self.output_size)
         
         if self.use_cuda:
             hidden_states = hidden_states.cuda()
             cell_states = cell_states.cuda()
             outputs = outputs.cuda()
+        #import pdb; pdb.set_trace()
+        for batch_idx, batch_item in enumerate(batch):
+            input_data, grids, persons_list, _, lookup, _, _ = batch_item
+            num_persons = len(lookup)
 
-        # For each frame in the sequence
-        for framenum,frame in enumerate(input_data):
-            # Peds present in the current frame
-            nodeIDs = [int(nodeID) for nodeID in persons_list[framenum]]
+            # For each frame in the sequence
+            for framenum, frame in enumerate(input_data):
+                # Peds present in the current frame
+                node_ids = [int(nodeID) for nodeID in persons_list[framenum]]
 
-            if len(nodeIDs) == 0:
-                # If no peds, then go to the next frame
-                continue
+                if len(node_ids) == 0:
+                    # If no peds, then go to the next frame
+                    continue
 
-            # List of nodes
-            list_of_nodes = [lookup[x] for x in nodeIDs]
+                # List of current node indices across the whole sequence
+                node_indices_frame = [lookup[x] for x in node_ids]
 
-            corr_index = Variable((torch.LongTensor(list_of_nodes))) 
-            if self.use_cuda:            
-                corr_index = corr_index.cuda()
+                # List of corresponding indices across the whole batch
+                node_indices_batch = [lookup_batch[i] for i in node_ids]
+                corr_index = Variable((torch.LongTensor(node_indices_batch))) 
+                if self.use_cuda:            
+                    corr_index = corr_index.cuda()
 
-            # Select the corresponding input positions
-            nodes_current = frame[list_of_nodes,:]
-            # Get the corresponding grid masks
-            grid_current = grids[framenum]
+                # Select the corresponding input positions
+                nodes_current = frame[node_indices_frame, :]
+                # Get the corresponding grid masks
+                grid_current = grids[framenum]
 
-            # Get the corresponding hidden and cell states
-            hidden_states_current = torch.index_select(hidden_states, 0, corr_index)
-            cell_states_current = torch.index_select(cell_states, 0, corr_index)
+                # Get the corresponding hidden and cell states
+                hidden_states_current = torch.index_select(hidden_states, 1, corr_index)[batch_idx]
+                cell_states_current = torch.index_select(cell_states, 1, corr_index)[batch_idx]
 
-            # Compute the social tensor by performing social pooling
-            social_tensor = self.getSocialTensor(grid_current, hidden_states_current)
-            # Embed the social tensor
-            tensor_embedded = self.dropout(self.relu(self.tensor_embedding_layer(social_tensor)))
+                # Compute the social tensor by performing social pooling
+                social_tensor = self.getSocialTensor(grid_current, hidden_states_current)
+                # Embed the social tensor
+                tensor_embedded = self.dropout(self.relu(self.tensor_embedding_layer(social_tensor)))
 
-            # Embed inputs
-            input_embedded = self.dropout(self.relu(self.input_embedding_layer(nodes_current)))
-            
-            # Concat input
-            concat_embedded = torch.cat((input_embedded, tensor_embedded), 1)
+                # Embed inputs
+                input_embedded = self.dropout(self.relu(self.input_embedding_layer(nodes_current)))
+                
+                # Concat input
+                concat_embedded = torch.cat((input_embedded, tensor_embedded), 1)
 
-            # One-step of the LSTM
-            h_nodes, c_nodes = self.cell(concat_embedded, (hidden_states_current, cell_states_current))
+                # One-step of the LSTM
+                h_nodes, c_nodes = self.cell(concat_embedded, (hidden_states_current, cell_states_current))
 
-            # Compute the output
-            outputs[framenum, corr_index.data] = self.output_layer(h_nodes)
+                # Compute the output
+                outputs[framenum, batch_idx, corr_index.data] = self.output_layer(h_nodes)
 
-            # Update hidden and cell states
-            hidden_states[corr_index.data] = h_nodes
-            cell_states[corr_index.data] = c_nodes
+                # Update hidden and cell states
+                hidden_states[batch_idx, corr_index.data] = h_nodes
+                cell_states[batch_idx, corr_index.data] = c_nodes
 
         return outputs, hidden_states, cell_states
     
     def computeLoss(self, outputs, batch_item):
         input_data, _, persons_list, _, lookup, _, _ = batch_item
         return helper.Gaussian2DLikelihood(outputs, input_data, persons_list, lookup)
+    
+    def computeLossBatch(self, outputs, batch):
+        all_persons_batch = pd.unique(self.getAllPersons(batch))
+        lookup_batch = {i:idx for i,idx in zip(all_persons_batch, range(len(all_persons_batch)))}
+        loss = 0
+        for batch_idx, batch_item in enumerate(batch):
+            input_data, _, persons_list, _, lookup, _, _ = batch_item
+            node_ids = pd.unique(list(itertools.chain.from_iterable(persons_list)))
+            corr_indices = torch.LongTensor([lookup_batch[i] for i in node_ids]).to(outputs.device)
+            corr_outputs = torch.index_select(outputs[:, batch_idx, :, :], 1, corr_indices)
+            #import pdb; pdb.set_trace()
+            loss += helper.Gaussian2DLikelihood(corr_outputs, input_data, persons_list, lookup)/len(persons_list)
+        return loss/len(batch) #TODO: Check if correct and check if consistent with computeLossBatch of graph model
 
     def toCuda(self, batch_item):
         #input_data, grids, persons_list, _, lookup, _, _ = batch_item
@@ -151,6 +184,15 @@ class SocialModel(BaseModel):
                 batch_item[1][i] = batch_item[1][i].cuda()
         return batch_item
     
+    def toCudaBatch(self, batch):
+        if self.use_cuda:
+            for batch_item in batch:
+                #input_data, grids, persons_list, _, lookup, _, _ = batch_item
+                batch_item[0] = batch_item[0].cuda()        
+                for i in range(len(batch_item[1])):
+                    batch_item[1][i] = batch_item[1][i].cuda()
+        return batch
+
     @staticmethod
     def collateFn(items, args):
         batch=[]
