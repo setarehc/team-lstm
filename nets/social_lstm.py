@@ -86,12 +86,16 @@ class SocialModel(BaseModel):
         hidden_states
         cell_states
         '''
+        
+        batch_data = batch[0]
+        mask = batch[1]
 
-        seq_length = len(batch[0][0])
-        batch_size = len(batch)
-        all_persons_batch = pd.unique(self.getAllPersons(batch))
+        seq_length = mask.size(0)
+        batch_size = mask.size(1)
+        max_num_persons = mask.size(2)
+
+        all_persons_batch = pd.unique(self.getAllPersons(batch_data))
         lookup_batch = {i:idx for i,idx in zip(all_persons_batch, range(len(all_persons_batch)))}
-        max_num_persons = len(all_persons_batch)
 
         if hidden_states is None: 
             hidden_states = torch.zeros(batch_size, max_num_persons, self.rnn_size)
@@ -104,31 +108,33 @@ class SocialModel(BaseModel):
             hidden_states = hidden_states.cuda()
             cell_states = cell_states.cuda()
             outputs = outputs.cuda()
-        #import pdb; pdb.set_trace()
-        for batch_idx, batch_item in enumerate(batch):
-            input_data, grids, persons_list, _, lookup, _, _ = batch_item
+
+        # Loop through the batch
+        for batch_idx, batch_item in enumerate(batch_data):
+            # Extract sequence data
+            input_data, grids, persons_list, lookup = batch_item
             num_persons = len(lookup)
 
             # For each frame in the sequence
             for framenum, frame in enumerate(input_data):
                 # Peds present in the current frame
-                node_ids = [int(nodeID) for nodeID in persons_list[framenum]]
+                node_ids = [int(node_id) for node_id in persons_list[framenum]]
 
                 if len(node_ids) == 0:
                     # If no peds, then go to the next frame
                     continue
 
                 # List of current node indices across the whole sequence
-                node_indices_frame = [lookup[x] for x in node_ids]
+                node_indices_seq = [lookup[x] for x in node_ids]
 
                 # List of corresponding indices across the whole batch
                 node_indices_batch = [lookup_batch[i] for i in node_ids]
-                corr_index = Variable((torch.LongTensor(node_indices_batch))) 
+                corr_index = Variable((torch.LongTensor(node_indices_batch))) # TODO: remove variable 
                 if self.use_cuda:            
                     corr_index = corr_index.cuda()
 
                 # Select the corresponding input positions
-                nodes_current = frame[node_indices_frame, :]
+                nodes_current = frame[node_indices_seq, :]
                 # Get the corresponding grid masks
                 grid_current = grids[framenum]
 
@@ -164,20 +170,20 @@ class SocialModel(BaseModel):
         return helper.Gaussian2DLikelihood(outputs, input_data, persons_list, lookup)
     
     def computeLossBatch(self, outputs, batch):
-        all_persons_batch = pd.unique(self.getAllPersons(batch))
+        batch_data = batch[0]
+        all_persons_batch = pd.unique(self.getAllPersons(batch_data))
         lookup_batch = {i:idx for i,idx in zip(all_persons_batch, range(len(all_persons_batch)))}
         loss = 0
-        for batch_idx, batch_item in enumerate(batch):
-            input_data, _, persons_list, _, lookup, _, _ = batch_item
+        for batch_idx, batch_item in enumerate(batch_data):
+            input_data, _, persons_list, lookup = batch_item
             node_ids = pd.unique(list(itertools.chain.from_iterable(persons_list)))
             corr_indices = torch.LongTensor([lookup_batch[i] for i in node_ids]).to(outputs.device)
             corr_outputs = torch.index_select(outputs[:, batch_idx, :, :], 1, corr_indices)
             #import pdb; pdb.set_trace()
             loss += helper.Gaussian2DLikelihood(corr_outputs, input_data, persons_list, lookup)/len(persons_list)
-        return loss/len(batch) #TODO: Check if correct and check if consistent with computeLossBatch of graph model
+        return loss/len(batch_data) #TODO: Check if correct and check if consistent with computeLossBatch of graph model
 
     def toCuda(self, batch_item):
-        #input_data, grids, persons_list, _, lookup, _, _ = batch_item
         if self.use_cuda:
             batch_item[0] = batch_item[0].cuda()        
             for i in range(len(batch_item[1])):
@@ -185,9 +191,10 @@ class SocialModel(BaseModel):
         return batch_item
     
     def toCudaBatch(self, batch):
+        #batch_data, mask = batch
         if self.use_cuda:
-            for batch_item in batch:
-                #input_data, grids, persons_list, _, lookup, _, _ = batch_item
+            batch[1] = batch[1].cuda()
+            for batch_item in batch[0]:
                 batch_item[0] = batch_item[0].cuda()        
                 for i in range(len(batch_item[1])):
                     batch_item[1][i] = batch_item[1][i].cuda()
@@ -196,8 +203,15 @@ class SocialModel(BaseModel):
     @staticmethod
     def collateFn(items, args):
         batch=[]
-        for x_seq, num_persons_list_seq, persons_list_seq, folder_path in items:
+
+        all_seq_data = []
+        all_persons = []
+        batch_data = []
+        for x_seq, _, persons_list_seq, folder_path in items:
             # Dense vector (tensor) creation
+            all_seq_data.append(x_seq)
+            all_persons.append(list(itertools.chain.from_iterable(persons_list_seq)))
+
             x_seq, lookup_seq = td.convertToTensor(x_seq, persons_list_seq)
             # Get processing file name and then get dimensions of file
             folder_name = helper.getFolderName(folder_path, args.dataset)
@@ -206,8 +220,9 @@ class SocialModel(BaseModel):
             grid_seq = grid.getSequenceGridMask(x_seq, dataset_dim, persons_list_seq, args.neighborhood_size,
                                            args.grid_size, args.use_cuda)
             # Vectorize trajectories in sequence
-            x_seq, init_values_dict = helper.vectorizeSeq(x_seq, persons_list_seq, lookup_seq)
-
-            batch.append([x_seq, grid_seq, persons_list_seq, num_persons_list_seq, lookup_seq, dataset_dim, init_values_dict])
+            #x_seq, init_values_dict = helper.vectorizeSeq(x_seq, persons_list_seq, lookup_seq)
+            batch_data.append([x_seq, grid_seq, persons_list_seq, lookup_seq])
+        _, mask = td.tensorizeData(all_seq_data, all_persons)
+        batch = [batch_data, mask]
 
         return batch

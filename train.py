@@ -190,14 +190,9 @@ def train(args, _run):
             start = time.time()
 
             loss_batch = 0
-            #import pdb; pdb.set_trace()
-            # Check if last batch is shorter that batch_size
-            curr_batch_length = 0
-            if args.model == 'graph':
-                curr_batch_length = batch[0].size(1)
-            else:
-                curr_batch_length = len(batch)
 
+            # Check if last batch is shorter that batch_size
+            curr_batch_length = batch[1].size(1) #TODO: check for vanilla model
             if curr_batch_length < args.batch_size:
                 continue
             
@@ -205,6 +200,7 @@ def train(args, _run):
 
             optimizer.zero_grad()
 
+            #import pdb; pdb.set_trace()
             # Forward prop
             outputs, _, _ = net(batch)
             
