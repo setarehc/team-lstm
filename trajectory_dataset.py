@@ -74,7 +74,7 @@ def tensorizeData(all_xy_posns, all_ids):
     final_tensor_xy_posns = torch.from_numpy(np.array(tensor_xy_posns)).float()
     final_mask = torch.from_numpy(np.array(mask)).float()
 
-    return final_tensor_xy_posns, final_mask
+    return final_tensor_xy_posns, final_mask, lookup_dict
 
 
 class TrajectoryDataset(Dataset):

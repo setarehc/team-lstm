@@ -273,7 +273,7 @@ class GraphModel(BaseModel):
             all_seq_data.append(x_seq)
             all_persons.append(list(itertools.chain.from_iterable(persons_list_seq)))
         
-        data, mask = td.tensorizeData(all_seq_data, all_persons)
+        data, mask, _ = td.tensorizeData(all_seq_data, all_persons)
         batch = [data, mask]
         return batch
         

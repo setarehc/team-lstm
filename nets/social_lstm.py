@@ -64,14 +64,6 @@ class SocialModel(BaseModel):
         # Reshape the social tensor
         social_tensor = social_tensor.view(numNodes, self.grid_size*self.grid_size*self.rnn_size)
         return social_tensor
-    
-    def getAllPersons(self, batch):
-        all_persons_list = []
-        for batch_item in batch:
-            all_persons_list.append(batch_item[2])
-        
-        return_list = list(itertools.chain.from_iterable(all_persons_list))
-        return list(itertools.chain.from_iterable(return_list))
             
     def forward(self, batch, hidden_states=None, cell_states=None):
         '''
@@ -87,15 +79,14 @@ class SocialModel(BaseModel):
         cell_states
         '''
         
-        batch_data = batch[0]
+        batch_data = batch[3]
         mask = batch[1]
 
         seq_length = mask.size(0)
         batch_size = mask.size(1)
         max_num_persons = mask.size(2)
 
-        all_persons_batch = pd.unique(self.getAllPersons(batch_data))
-        lookup_batch = {i:idx for i,idx in zip(all_persons_batch, range(len(all_persons_batch)))}
+        lookup_batch = batch[2]
 
         if hidden_states is None: 
             hidden_states = torch.zeros(batch_size, max_num_persons, self.rnn_size)
@@ -112,7 +103,7 @@ class SocialModel(BaseModel):
         # Loop through the batch
         for batch_idx, batch_item in enumerate(batch_data):
             # Extract sequence data
-            input_data, grids, persons_list, lookup = batch_item
+            input_data, grids, persons_list, lookup, _ = batch_item
             num_persons = len(lookup)
 
             # For each frame in the sequence
@@ -170,12 +161,12 @@ class SocialModel(BaseModel):
         return helper.Gaussian2DLikelihood(outputs, input_data, persons_list, lookup)
     
     def computeLossBatch(self, outputs, batch):
-        batch_data = batch[0]
-        all_persons_batch = pd.unique(self.getAllPersons(batch_data))
-        lookup_batch = {i:idx for i,idx in zip(all_persons_batch, range(len(all_persons_batch)))}
+        lookup_batch = batch[2]
+        batch_data = batch[3]
+
         loss = 0
         for batch_idx, batch_item in enumerate(batch_data):
-            input_data, _, persons_list, lookup = batch_item
+            input_data, _, persons_list, lookup, _ = batch_item
             node_ids = pd.unique(list(itertools.chain.from_iterable(persons_list)))
             corr_indices = torch.LongTensor([lookup_batch[i] for i in node_ids]).to(outputs.device)
             corr_outputs = torch.index_select(outputs[:, batch_idx, :, :], 1, corr_indices)
@@ -193,12 +184,130 @@ class SocialModel(BaseModel):
     def toCudaBatch(self, batch):
         #batch_data, mask = batch
         if self.use_cuda:
+            batch[0] = batch[0].cuda()
             batch[1] = batch[1].cuda()
-            for batch_item in batch[0]:
+            for batch_item in batch[3]:
                 batch_item[0] = batch_item[0].cuda()        
                 for i in range(len(batch_item[1])):
                     batch_item[1][i] = batch_item[1][i].cuda()
         return batch
+
+    def sample(self, batch, args, saved_args):
+        '''
+        The sample function
+        params:
+        batch: A single batch item
+        net: The model
+        args: Model arguments
+        saved_args: Configuration arguments used for training the model
+        '''
+        
+        batch = self.toCudaBatch(batch)
+
+        # Unpack batch
+        xy_posns = batch[0]
+        mask = batch[1]
+        lookup_batch = batch[2]
+        batch_data = batch[3]
+
+        batch_size = xy_posns.size(1)
+        max_num_persons = xy_posns.size(2)
+        dim = 2
+
+        with torch.no_grad():
+            
+            # Initialize hidden and cell states
+            hidden_states = torch.zeros(batch_size, max_num_persons, args.rnn_size)
+            cell_states = torch.zeros(batch_size, max_num_persons, args.rnn_size)
+            
+            # Initialize the return data structure
+            sampled_xy_posns = torch.zeros(args.obs_length + args.pred_length, batch_size, max_num_persons, dim)
+            
+            if args.use_cuda:
+                hidden_states = hidden_states.cuda()
+                cell_states = cell_states.cuda()
+                sampled_xy_posns = sampled_xy_posns.cuda()
+
+            # Loop over batches
+            for batch_idx, batch_item in enumerate(batch_data):
+                #import pdb; pdb.set_trace()
+                x_seq, grids_seq, persons_list_seq, lookup_seq, dataset_dim = batch_item
+                num_persons = len(lookup_seq)
+                
+                # For the observed part of the trajectory
+                for tstep in range(args.obs_length - 1):
+                    # Do a forward prop
+                    cur_batch_data = [x_seq[tstep].view(1, num_persons, dim), [grids_seq[tstep]], [persons_list_seq[tstep]], lookup_seq, dataset_dim]
+                    outputs, hidden_states, cell_states = self.forward([xy_posns[tstep, batch_idx].view(1, 1, max_num_persons, dim), 
+                                                               mask[tstep, batch_idx].view(1, 1, max_num_persons),
+                                                               lookup_batch,
+                                                               [cur_batch_data]],
+                                                               hidden_states,
+                                                               cell_states)
+
+                    # Extract the mean, std and corr of the bivariate Gaussian
+                    mux, muy, sx, sy, corr = helper.getCoefBatch(outputs)
+
+                    # Sample from the bivariate Gaussian
+                    cur_mask = mask[tstep, batch_idx, :].view(1, 1, max_num_persons)
+                    next_x, next_y = helper.sampleGaussian2dBatch(mux.data, muy.data, sx.data, sy.data, corr.data, cur_mask)
+
+                    # Save predicted positions into return data structure
+                    sampled_xy_posns[tstep + 1, batch_idx, :, 0] = next_x
+                    sampled_xy_posns[tstep + 1, batch_idx, :, 1] = next_y
+
+                # Set last seen grid
+                prev_grid = grids_seq[args.obs_length - 1].clone()
+
+                # For the predicted part of the trajectory
+                for tstep in range(args.obs_length - 1, args.pred_length + args.obs_length - 1):
+                    # Do a forward prop
+                    
+                    if tstep == args.obs_length - 1:
+                        net_input = x_seq[tstep].view(1, num_persons, dim)
+                    else:
+                        net_input = sampled_xy_posns[tstep, batch_idx].view(1, max_num_persons, dim)
+
+                    cur_batch_data = [net_input, [prev_grid], [persons_list_seq[tstep]], lookup_seq, dataset_dim]
+                    outputs, hidden_states, cell_states = self.forward([xy_posns[tstep, batch_idx].view(1, 1, max_num_persons, dim), 
+                                                               mask[tstep, batch_idx].view(1, 1, max_num_persons),
+                                                               lookup_batch,
+                                                               [cur_batch_data]],
+                                                               hidden_states,
+                                                               cell_states)
+
+                    # Extract the mean, std and corr of the bivariate Gaussian
+                    mux, muy, sx, sy, corr = helper.getCoefBatch(outputs)
+                   
+                    # Sample from the bivariate Gaussian
+                    cur_mask = mask[tstep, batch_idx, :].view(1, 1, max_num_persons)
+                    next_x, next_y = helper.sampleGaussian2dBatch(mux.data, muy.data, sx.data, sy.data, corr.data, cur_mask)
+
+                    # Save predicted positions into return data structure
+                    sampled_xy_posns[tstep + 1, batch_idx, :, 0] = next_x
+                    sampled_xy_posns[tstep + 1, batch_idx, :, 1] = next_y
+                
+                    # Compute grid masks based on the predicted positions
+                    cor_pred_positions = self.getCorPredPositions(sampled_xy_posns[tstep+1, batch_idx], persons_list_seq[tstep+1], lookup_batch, args)
+                    prev_grid = grid.getGridMask(cor_pred_positions.data.cpu(), 
+                                                 dataset_dim, 
+                                                 len(persons_list_seq[tstep+1]), 
+                                                 saved_args.neighborhood_size, 
+                                                 saved_args.grid_size)
+                    prev_grid = torch.from_numpy(prev_grid).float()
+                    if args.use_cuda:
+                        prev_grid = prev_grid.cuda()
+
+            # Revert the points back to the original space
+            #sampled_x_seq = revertSeq(sampled_x_seq.data.cpu(), peds_list, lookup, init_values_dict)
+            return sampled_xy_posns
+    
+    def getCorPredPositions(self, pred_positions, peds_list, lookup, args):
+        peds_list = [int(ped) for ped in peds_list]
+        peds_indices = torch.LongTensor([lookup[ped] for ped in peds_list])
+        if args.use_cuda:
+            peds_indices = peds_indices.cuda()
+        return torch.index_select(pred_positions, 0, peds_indices)
 
     @staticmethod
     def collateFn(items, args):
@@ -221,8 +330,8 @@ class SocialModel(BaseModel):
                                            args.grid_size, args.use_cuda)
             # Vectorize trajectories in sequence
             #x_seq, init_values_dict = helper.vectorizeSeq(x_seq, persons_list_seq, lookup_seq)
-            batch_data.append([x_seq, grid_seq, persons_list_seq, lookup_seq])
-        _, mask = td.tensorizeData(all_seq_data, all_persons)
-        batch = [batch_data, mask]
+            batch_data.append([x_seq, grid_seq, persons_list_seq, lookup_seq, dataset_dim])
+        data, mask, lookup_batch = td.tensorizeData(all_seq_data, all_persons)
+        batch = [data, mask, lookup_batch, batch_data]
 
         return batch

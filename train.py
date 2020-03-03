@@ -192,7 +192,7 @@ def train(args, _run):
             loss_batch = 0
 
             # Check if last batch is shorter that batch_size
-            curr_batch_length = batch[1].size(1) #TODO: check for vanilla model
+            curr_batch_length = batch[0].size(1) #TODO: check for vanilla model
             if curr_batch_length < args.batch_size:
                 continue
             
@@ -276,14 +276,10 @@ def validLoss(net, valid_loader, args):
     with torch.no_grad():
         num_batches = 0
         total_loss = 0
-        
+
         for batch_idx, batch in enumerate(valid_loader):
-            
-            if args.model == 'graph':
-                curr_batch_length = batch[0].size(1)
-            else:
-                curr_batch_length = len(batch)
             # Check if last batch is shorter that batch_size
+            curr_batch_length = batch[0].size(1) #TODO: check if works for vanilla model
             if curr_batch_length < args.batch_size:
                 continue
             

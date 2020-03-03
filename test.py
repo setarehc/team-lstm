@@ -82,8 +82,6 @@ def testHelper(net, test_loader, sample_args, saved_args, result_directory):
         # Unpack batch
         xy_posns = batch[0]
         mask = batch[1]
-
-        orig_data = xy_posns # Used for error calculation
         
         # Predict next xy positions
         sampled_xy_posns = net.sample(batch, sample_args, saved_args)
@@ -91,7 +89,7 @@ def testHelper(net, test_loader, sample_args, saved_args, result_directory):
         if sample_args.use_cuda:
                 sampled_xy_posns = sampled_xy_posns.cuda()
         
-        for batch_idx in range(xy_posns.size(1)):
+        for batch_idx in range(mask.size(1)):
             start = time.time() #TODO: check whether start and end are correctly placed or not
 
             sampled_seq = sampled_xy_posns[:, batch_idx, :, :]
@@ -246,13 +244,6 @@ def test(sample_args, _run):
     for i in range(sample_args.obs_length):
         print('Normalized l2 distances for step %d is %f' % (i, norm_l2_dists.data[i]))
     print('Smallest error iteration:', smallest_err_iter_num + 1)
-
-def getCorPredPositions(pred_positions, peds_list, lookup, args):
-    peds_list = [int(ped) for ped in peds_list]
-    peds_indices = torch.LongTensor([lookup[ped] for ped in peds_list])
-    if args.use_cuda:
-        peds_indices = peds_indices.cuda()
-    return torch.index_select(pred_positions, 0, peds_indices)
 
 def submissionPreprocess(dataloader, sampled_x_seq, pred_length, obs_length, target_id):
     seq_lenght = pred_length + obs_length
