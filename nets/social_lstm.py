@@ -104,12 +104,11 @@ class SocialModel(BaseModel):
         for batch_idx, batch_item in enumerate(batch_data):
             # Extract sequence data
             input_data, grids, persons_list, lookup, _ = batch_item
-            num_persons = len(lookup)
 
             # For each frame in the sequence
-            for framenum, frame in enumerate(input_data):
-                # Peds present in the current frame
-                node_ids = [int(node_id) for node_id in persons_list[framenum]]
+            for frame_num, frame in enumerate(input_data):
+                # Persons present in the current frame
+                node_ids = [int(node_id) for node_id in persons_list[frame_num]]
 
                 if len(node_ids) == 0:
                     # If no peds, then go to the next frame
@@ -127,7 +126,7 @@ class SocialModel(BaseModel):
                 # Select the corresponding input positions
                 nodes_current = frame[node_indices_seq, :]
                 # Get the corresponding grid masks
-                grid_current = grids[framenum]
+                grid_current = grids[frame_num]
 
                 # Get the corresponding hidden and cell states
                 hidden_states_current = torch.index_select(hidden_states, 1, corr_index)[batch_idx]
@@ -148,7 +147,7 @@ class SocialModel(BaseModel):
                 h_nodes, c_nodes = self.cell(concat_embedded, (hidden_states_current, cell_states_current))
 
                 # Compute the output
-                outputs[framenum, batch_idx, corr_index.data] = self.output_layer(h_nodes)
+                outputs[frame_num, batch_idx, corr_index.data] = self.output_layer(h_nodes)
 
                 # Update hidden and cell states
                 hidden_states[batch_idx, corr_index.data] = h_nodes
